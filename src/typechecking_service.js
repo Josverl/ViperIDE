@@ -129,6 +129,10 @@ export class TypecheckingService {
     if (this.initializing) {
       await this.initializing
     }
+    // A board switch closes the old transport before the replacement is ready.
+    if (this.switching) {
+      await this.switching
+    }
     if (this.status !== 'ready') {
       throw new Error(`TypecheckingService is not ready: ${this.status}`)
     }
@@ -256,6 +260,8 @@ export class TypecheckingService {
       throw new Error('TypecheckingService cannot switch stub bundles')
     }
 
+    // Block transport users while switchBoard replaces the connected worker.
+    this.status = 'switching'
     this.switching = this.prepareRuntime({ ...this.clientConfig, boardId }).
       then(async runtimeConfig => ({
         result: await this.switchBoard(
@@ -270,6 +276,7 @@ export class TypecheckingService {
         this.selectedStubBundle = runtimeConfig.stubBundle
         this.clientConfig = { ...this.clientConfig, ...runtimeConfig, boardId }
         this.rebindEditors()
+        this.status = 'ready'
         return true
       }).
       catch(error => {

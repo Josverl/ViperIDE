@@ -282,6 +282,52 @@ describe('TypecheckingService', () => {
         assert.deepEqual(configured.at(-1), ['lsp:file:///workspace/main.py'])
     })
 
+    it('waits for a device switch before binding a newly opened editor', async () => {
+        const first = resources()
+        const replacement = resources()
+        const replacementReady = deferred()
+        const switchStarted = deferred()
+        const synced = []
+        first.transport.syncWorkspaceFile = () => {
+            if (first.transport.closeCalls) {
+                throw new Error('WorkerTransport: not connected')
+            }
+        }
+        replacement.transport.syncWorkspaceFile = (path, content) =>
+            synced.push({ path, content })
+        const service = new TypecheckingService({
+            createLSPClient: async () => first,
+            prepareRuntime: async config => ({
+                workerUrl: 'blob:worker',
+                stubBundle: { id: config.boardId || 'stdlib' },
+            }),
+            switchBoard: async current => {
+                current.transport.close()
+                switchStarted.resolve()
+                await replacementReady.promise
+                return replacement
+            },
+            createLSPPlugin: () => ['lsp-extension'],
+            configureEditor: () => true,
+        })
+        await service.initialize({ boardId: 'stdlib' })
+
+        const switching = service.selectDevice({ machine: 'ESP32 module' })
+        await switchStarted.promise
+        const binding = service.bindEditor(editor('opened quickly'), 'fast.py')
+
+        assert.strictEqual(service.status, 'switching')
+        assert.deepEqual(synced, [])
+
+        replacementReady.resolve()
+        await switching
+        const uri = await binding
+
+        assert.strictEqual(service.status, 'ready')
+        assert.strictEqual(uri, 'file:///workspace/fast.py')
+        assert.deepEqual(synced, [{ path: 'fast.py', content: 'opened quickly' }])
+    })
+
     it('validates editor integration configuration', () => {
         const service = new TypecheckingService({ createLSPClient: async () => resources() })
 
