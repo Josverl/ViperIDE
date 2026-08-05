@@ -3,6 +3,8 @@
  * SPDX-License-Identifier: MIT
  */
 
+const DIAGNOSTIC_DELAY_MS = 750
+
 export function stubTargetForDevice(devInfo = {}) {
   const identity = [
     devInfo.machine,
@@ -17,6 +19,7 @@ export function stubTargetForDevice(devInfo = {}) {
   if (/rp2|rp2040|rp2350|raspberry pi pico/.test(identity)) { return 'rp2' }
   if (/stm32|pyboard/.test(identity)) { return 'stm32' }
   if (/samd/.test(identity)) { return 'samd' }
+  if (/webassembly/.test(identity)) { return 'webassembly' }
   return 'stdlib'
 }
 
@@ -125,6 +128,16 @@ export class TypecheckingService {
     this.configureEditor = configureEditor
   }
 
+  createEditorExtensions(editorView, uri, content) {
+    return this.createLSPPlugin(this.client, editorView, {
+      fileUri: uri,
+      languageId: 'python',
+      initialContent: content,
+      diagnosticDelayMs: DIAGNOSTIC_DELAY_MS,
+      onDiagnosticsChange: diagnostics => this.setDiagnosticStatus(uri, diagnostics),
+    })
+  }
+
   async bindEditor(editorView, path) {
     if (this.initializing) {
       await this.initializing
@@ -146,12 +159,7 @@ export class TypecheckingService {
     this.transport.syncWorkspaceFile(workspacePath, content)
     this.workspacePaths.add(workspacePath)
     this.openDocument(uri)
-    const extensions = this.createLSPPlugin(this.client, editorView, {
-      fileUri: uri,
-      languageId: 'python',
-      initialContent: content,
-      onDiagnosticsChange: diagnostics => this.setDiagnosticStatus(uri, diagnostics),
-    })
+    const extensions = this.createEditorExtensions(editorView, uri, content)
     if (!this.configureEditor(editorView, extensions)) {
       this.closeDocument(uri)
       throw new Error(`Editor does not support type checking: ${path}`)
@@ -203,12 +211,7 @@ export class TypecheckingService {
       this.transport.syncWorkspaceFile(newWorkspacePath, content)
       this.workspacePaths.add(newWorkspacePath)
       this.openDocument(uri)
-      const extensions = this.createLSPPlugin(this.client, editorView, {
-        fileUri: uri,
-        languageId: 'python',
-        initialContent: content,
-        onDiagnosticsChange: diagnostics => this.setDiagnosticStatus(uri, diagnostics),
-      })
+      const extensions = this.createEditorExtensions(editorView, uri, content)
       this.configureEditor(editorView, extensions)
       this.editorBindings.set(editorView, { path: renamed, uri })
     }
@@ -300,13 +303,7 @@ export class TypecheckingService {
       this.transport.syncWorkspaceFile(workspacePath, content)
       this.workspacePaths.add(workspacePath)
       this.openDocument(binding.uri)
-      const extensions = this.createLSPPlugin(this.client, editorView, {
-        fileUri: binding.uri,
-        languageId: 'python',
-        initialContent: content,
-        onDiagnosticsChange: diagnostics =>
-          this.setDiagnosticStatus(binding.uri, diagnostics),
-      })
+      const extensions = this.createEditorExtensions(editorView, binding.uri, content)
       this.configureEditor(editorView, extensions)
     }
   }

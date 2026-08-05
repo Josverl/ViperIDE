@@ -69,7 +69,7 @@ describe('TypecheckingAssets', () => {
                 }
             },
             createObjectURL: blob => {
-                assert.include(blob.parts[0], 'pyright-worker-v0.2.1')
+                assert.include(blob.parts[0], 'pyright-worker-v0.2.2')
                 return 'blob:worker'
             },
         })
@@ -81,8 +81,8 @@ describe('TypecheckingAssets', () => {
         assert.strictEqual(runtime.boardStubs, stubs)
         assert.strictEqual(runtime.stubBundle.id, 'esp32')
         assert.lengthOf(requests, 2)
-        assert.match(requests[0], /pyright-worker-v0\.2\.1.*stubs-manifest\.json$/)
-        assert.match(requests[1], /pyright-worker-v0\.2\.1.*stubs-esp32\.zip$/)
+        assert.match(requests[0], /pyright-worker-v0\.2\.2.*stubs-manifest\.json$/)
+        assert.match(requests[1], /pyright-worker-v0\.2\.2.*stubs-esp32\.zip$/)
     })
 
     it('creates one worker Blob URL and caches immutable assets', async () => {

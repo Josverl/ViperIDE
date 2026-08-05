@@ -42,7 +42,7 @@ describe('TypecheckingService', () => {
         assert.strictEqual(stubTargetForDevice({ machine: 'Raspberry Pi Pico W with RP2040' }), 'rp2')
         assert.strictEqual(stubTargetForDevice({ sysname: 'pyboard', mpy_arch: 'armv7emsp' }), 'stm32')
         assert.strictEqual(stubTargetForDevice({ version: 'CircuitPython 10.2.0' }), 'circuitpython')
-        assert.strictEqual(stubTargetForDevice({ machine: 'webassembly' }), 'stdlib')
+        assert.strictEqual(stubTargetForDevice({ machine: 'webassembly' }), 'webassembly')
     })
 
     it('initializes one client and reports owned state', async () => {
@@ -134,6 +134,7 @@ describe('TypecheckingService', () => {
         assert.strictEqual(uri, 'file:///workspace/lib/my%20file.py')
         assert.strictEqual(pluginOptions.fileUri, uri)
         assert.strictEqual(pluginOptions.initialContent, 'print(1)')
+        assert.strictEqual(pluginOptions.diagnosticDelayMs, 750)
         assert.deepEqual(configured, [{ view, extensions: ['lsp-extension'] }])
         assert.strictEqual(service.documentVersions.get(uri), 1)
     })

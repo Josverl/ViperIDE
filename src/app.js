@@ -1659,10 +1659,11 @@ async function _loadContent(fn, content, editorElement, { external=null } = {}) 
             if (!update.docChanged) return
             // The tab knows the current name; this one goes stale on a move
             const key = getTabFileName(editorElement) || tabFn
+            const text = update.state.doc.toString()
+            // Keep completion and hover synchronized while draft persistence remains coalesced.
+            typechecking.changeEditor(editor, text)
             scheduleSync(() => {
-                const text = update.state.doc.toString()
                 setDirty(key, fsCache.setDraft(key, text))
-                typechecking.changeEditor(editor, text)
             })
         })
 
