@@ -21,7 +21,8 @@ import { WebLinksAddon } from '@xterm/addon-web-links'
 import { FitAddon } from '@xterm/addon-fit'
 
 import { isStandalonePWA } from 'is-standalone-pwa';
-import { addUpdateHandler, createNewEditor, getEditorFromElement } from './editor.js'
+import { addUpdateHandler, configureTypechecking, createNewEditor, getEditorFromElement,
+         supportsTypechecking } from './editor.js'
 import { displayOpenFile, createTab, getTabFileName, getTabEditorElement } from './editor_tabs.js'
 import { serial as webSerialPolyfill } from 'web-serial-polyfill'
 import { WebSerial, WebBluetooth, WebSocketREPL, WebRTCTransport } from './transports/index.js'
@@ -49,6 +50,8 @@ import { createZipSync } from './zip.js'
 
 import { initControlClient } from './control_client.js'
 import { typechecking } from './typechecking.js'
+
+typechecking.setEditorIntegration(configureTypechecking)
 
 import { library, dom } from '@fortawesome/fontawesome-svg-core'
 import { faUsb, faBluetoothB } from '@fortawesome/free-brands-svg-icons'
@@ -1633,6 +1636,14 @@ async function _loadContent(fn, content, editorElement, { external=null } = {}) 
             devInfo,
             readOnly,
         })
+        if (supportsTypechecking(fn, readOnly)) {
+            try {
+                await typechecking.bindEditor(editor, fn)
+            } catch (err) {
+                // Type-checking failures must never prevent a file from opening.
+                report('Unable to enable type checking for this file', err)
+            }
+        }
         /* The text as handed to the editor, which is not the bytes on the device
            for prettified JSON or a disassembly. Comparing against this is what
            makes an undo clear the marker again. */

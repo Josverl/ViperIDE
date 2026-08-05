@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: MIT
  */
 
-import { createLSPClient } from
+import { createLSPClient, createLSPPlugin } from
   'https://cdn.jsdelivr.net/gh/Josverl/stubs_playground@lsp-client-v0.2.1/packages/lsp-client/src/index.js'
 
 import { TypecheckingService } from './typechecking_service.js'
@@ -12,6 +12,7 @@ import { typecheckingAssets } from './typechecking_assets.js'
 // One service instance owns the worker and all editor bindings for this application session.
 export const typechecking = new TypecheckingService({
   createLSPClient,
+  createLSPPlugin,
   prepareRuntime: config => typecheckingAssets.prepare(config.boardId),
   revokeObjectURL: url => {
     URL.revokeObjectURL(url)

@@ -94,6 +94,59 @@ describe('TypecheckingService', () => {
         assert.throws(() => service.changeDocument(uri), /not open/)
     })
 
+    it('binds an editor with an encoded workspace URI', async () => {
+        const result = resources()
+        const configured = []
+        let pluginOptions
+        const service = new TypecheckingService({
+            createLSPClient: async () => result,
+            createLSPPlugin: (_client, _view, options) => {
+                pluginOptions = options
+                return ['lsp-extension']
+            },
+            configureEditor: (view, extensions) => {
+                configured.push({ view, extensions })
+                return true
+            },
+        })
+        await service.initialize({ workerUrl: 'blob:worker' })
+        const view = { state: { doc: { toString: () => 'print(1)' } } }
+
+        const uri = await service.bindEditor(view, '/lib/my file.py')
+
+        assert.strictEqual(uri, 'file:///workspace/lib/my%20file.py')
+        assert.strictEqual(pluginOptions.fileUri, uri)
+        assert.strictEqual(pluginOptions.initialContent, 'print(1)')
+        assert.deepEqual(configured, [{ view, extensions: ['lsp-extension'] }])
+        assert.strictEqual(service.documentVersions.get(uri), 1)
+    })
+
+    it('rejects invalid document paths and unsupported editors', async () => {
+        const service = new TypecheckingService({
+            createLSPClient: async () => resources(),
+            createLSPPlugin: () => [],
+            configureEditor: () => false,
+        })
+        await service.initialize({ workerUrl: 'blob:worker' })
+        const view = { state: { doc: { toString: () => '' } } }
+
+        assert.throws(() => service.uriForPath('../main.py'), /Invalid document path/)
+        let caught
+        try {
+            await service.bindEditor(view, 'main.py')
+        } catch (error) {
+            caught = error
+        }
+        assert.match(caught.message, /does not support type checking/)
+    })
+
+    it('validates editor integration configuration', () => {
+        const service = new TypecheckingService({ createLSPClient: async () => resources() })
+
+        assert.throws(() => service.setEditorIntegration(null), /editor configurator/)
+        assert.doesNotThrow(() => service.setEditorIntegration(() => true))
+    })
+
     it('surfaces initialization errors and releases its Blob URL', async () => {
         const revoked = []
         const failure = new Error('worker failed')

@@ -8,7 +8,7 @@
 
 import { basicSetup } from 'codemirror'
 import { EditorView, ViewPlugin, keymap, Decoration } from '@codemirror/view'
-import { EditorState, RangeSetBuilder, Prec, StateEffect } from '@codemirror/state'
+import { Compartment, EditorState, RangeSetBuilder, Prec, StateEffect } from '@codemirror/state'
 import { StreamLanguage, indentUnit, syntaxTree, language } from '@codemirror/language'
 import { indentWithTab } from '@codemirror/commands'
 import { python } from '@codemirror/lang-python'
@@ -401,9 +401,29 @@ const extraTheme = EditorView.theme({
  * Finally, the editor initialization
  */
 
+const lspCompartments = new WeakMap()
+
+/**
+ * Return whether a file can receive live Python language-server extensions.
+ */
+export function supportsTypechecking(fn, readOnly = false) {
+  return fn.endsWith('.py') && !readOnly
+}
+
+/**
+ * Reconfigure the private LSP compartment attached to an editable Python view.
+ */
+export function configureTypechecking(editorView, extensions) {
+  const compartment = lspCompartments.get(editorView)
+  if (!compartment) { return false }
+  editorView.dispatch({ effects: compartment.reconfigure(extensions) })
+  return true
+}
+
 export async function createNewEditor(editorElement, fn, content, options) {
     let mode = []
     let { wordWrap, readOnly } = options
+    const lspCompartment = supportsTypechecking(fn, readOnly) ? new Compartment() : null
     if (fn.endsWith('.py')) {
         const ruff = await getRuffWorkspace()
         mode = [
@@ -443,6 +463,10 @@ export async function createNewEditor(editorElement, fn, content, options) {
         mode.push(EditorState.readOnly.of(true))
         mode.push(EditorView.editable.of(false))
     }
+    if (lspCompartment) {
+        // Start empty; the service fills this after its worker handshake completes.
+        mode.push(lspCompartment.of([]))
+    }
 
     devInfo = options.devInfo
 
@@ -480,6 +504,9 @@ export async function createNewEditor(editorElement, fn, content, options) {
             ],
         })
     })
+    if (lspCompartment) {
+        lspCompartments.set(view, lspCompartment)
+    }
 
     return view
 }

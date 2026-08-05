@@ -7,6 +7,8 @@
 export class TypecheckingService {
   constructor({
     createLSPClient,
+    createLSPPlugin = null,
+    configureEditor = null,
     prepareRuntime = null,
     revokeObjectURL = URL.revokeObjectURL.bind(URL),
   }) {
@@ -14,6 +16,8 @@ export class TypecheckingService {
       throw new TypeError('TypecheckingService requires createLSPClient')
     }
     this.createLSPClient = createLSPClient
+    this.createLSPPlugin = createLSPPlugin
+    this.configureEditor = configureEditor
     this.prepareRuntime = prepareRuntime
     this.revokeObjectURL = revokeObjectURL
     this.client = null
@@ -22,6 +26,7 @@ export class TypecheckingService {
     this.selectedStubBundle = null
     this.documentVersions = new Map()
     this.diagnosticStatus = new Map()
+    this.editorBindings = new WeakMap()
     this.status = 'idle'
     this.error = null
     this.initializing = null
@@ -86,6 +91,53 @@ export class TypecheckingService {
     return 1
   }
 
+  setEditorIntegration(configureEditor) {
+    if (typeof configureEditor !== 'function') {
+      throw new TypeError('TypecheckingService requires an editor configurator')
+    }
+    this.configureEditor = configureEditor
+  }
+
+  async bindEditor(editorView, path) {
+    if (this.initializing) {
+      await this.initializing
+    }
+    if (this.status !== 'ready') {
+      throw new Error(`TypecheckingService is not ready: ${this.status}`)
+    }
+    if (!this.createLSPPlugin || !this.configureEditor) {
+      throw new Error('TypecheckingService editor integration is not configured')
+    }
+
+    const uri = this.uriForPath(path)
+    const content = editorView.state.doc.toString()
+    this.openDocument(uri)
+    const extensions = this.createLSPPlugin(this.client, editorView, {
+      fileUri: uri,
+      languageId: 'python',
+      initialContent: content,
+      onDiagnosticsChange: diagnostics => this.setDiagnosticStatus(uri, diagnostics),
+    })
+    if (!this.configureEditor(editorView, extensions)) {
+      this.closeDocument(uri)
+      throw new Error(`Editor does not support type checking: ${path}`)
+    }
+    this.editorBindings.set(editorView, { uri })
+    return uri
+  }
+
+  uriForPath(path) {
+    if (typeof path !== 'string' || !path.trim()) {
+      throw new TypeError('Document path is required')
+    }
+    const relative = path.replace(/^\/+/, '')
+    const segments = relative.split('/')
+    if (segments.some(segment => !segment || segment === '.' || segment === '..')) {
+      throw new TypeError(`Invalid document path: ${path}`)
+    }
+    return `file:///workspace/${segments.map(encodeURIComponent).join('/')}`
+  }
+
   changeDocument(uri) {
     const version = this.documentVersions.get(uri)
     if (version === undefined) {
@@ -130,6 +182,7 @@ export class TypecheckingService {
     this.transport = null
     this.documentVersions.clear()
     this.diagnosticStatus.clear()
+    this.editorBindings = new WeakMap()
     this.releaseWorkerBlob()
   }
 
