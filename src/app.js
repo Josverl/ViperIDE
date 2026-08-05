@@ -48,7 +48,7 @@ import * as fsCache from './fs_cache.js'
 import { createZipSync } from './zip.js'
 
 import { initControlClient } from './control_client.js'
-import './typechecking.js'
+import { typechecking } from './typechecking.js'
 
 import { library, dom } from '@fortawesome/fontawesome-svg-core'
 import { faUsb, faBluetoothB } from '@fortawesome/free-brands-svg-icons'
@@ -2524,6 +2524,13 @@ function showOfflineReadyToast(version) {
     setTimeout(() => {
         document.body.classList.add('loaded')
     }, 100)
+
+    // Type checking is independent of device transport and remains alive across reconnects.
+    typechecking.initialize().catch(err => report('Unable to start type checking', err))
+    window.addEventListener('pagehide', event => {
+        // A bfcache page remains live and must retain its worker for restoration.
+        if (!event.persisted) { typechecking.dispose() }
+    })
 
     let urlID
     if ((urlID = urlParams.get('wss'))) {

@@ -39,6 +39,29 @@ describe('TypecheckingService', () => {
             revokeObjectURL: () => assert.fail('should not revoke before disposal'),
         })
 
+        it('prepares the pinned runtime before creating the client', async () => {
+            const result = resources()
+            let receivedConfig
+            const service = new TypecheckingService({
+                prepareRuntime: async config => ({
+                    workerUrl: 'blob:worker',
+                    workerBlobUrl: 'blob:worker',
+                    boardStubs: new ArrayBuffer(1),
+                    stubBundle: { id: config.boardId },
+                }),
+                createLSPClient: async config => {
+                    receivedConfig = config
+                    return result
+                },
+            })
+
+            await service.initialize({ boardId: 'esp32', timeout: 1000 })
+
+            assert.strictEqual(receivedConfig.workerUrl, 'blob:worker')
+            assert.strictEqual(receivedConfig.timeout, 1000)
+            assert.strictEqual(service.selectedStubBundle.id, 'esp32')
+        })
+
         const [first, second] = await Promise.all([
             service.initialize({
                 workerUrl: 'blob:worker',
@@ -131,6 +154,8 @@ describe('TypecheckingService', () => {
             workerBlobUrl: 'blob:worker',
         })
 
+        // Let runtime preparation enter createLSPClient before simulating teardown.
+        await Promise.resolve()
         service.dispose()
         pending.resolve(result)
 

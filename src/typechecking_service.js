@@ -5,11 +5,16 @@
 
 // Owns the application-wide LSP lifecycle and state independently of editor and device UI.
 export class TypecheckingService {
-  constructor({ createLSPClient, revokeObjectURL = URL.revokeObjectURL.bind(URL) }) {
+  constructor({
+    createLSPClient,
+    prepareRuntime = null,
+    revokeObjectURL = URL.revokeObjectURL.bind(URL),
+  }) {
     if (typeof createLSPClient !== 'function') {
       throw new TypeError('TypecheckingService requires createLSPClient')
     }
     this.createLSPClient = createLSPClient
+    this.prepareRuntime = prepareRuntime
     this.revokeObjectURL = revokeObjectURL
     this.client = null
     this.transport = null
@@ -33,18 +38,26 @@ export class TypecheckingService {
     if (this.initializing) {
       return this.initializing
     }
-    if (!config?.workerUrl) {
-      return Promise.reject(new TypeError('TypecheckingService requires config.workerUrl'))
-    }
-
     // A generation change prevents a late worker handshake from surviving disposal.
     const generation = this.generation
     this.status = 'starting'
     this.error = null
-    this.workerBlobUrl = config.workerBlobUrl || null
-    this.selectedStubBundle = config.stubBundle || null
 
-    this.initializing = this.createLSPClient(config).then(result => {
+    const prepare = this.prepareRuntime
+      ? this.prepareRuntime(config || {})
+      : Promise.resolve(config || {})
+    this.initializing = prepare.then(runtimeConfig => {
+      if (!runtimeConfig.workerUrl) {
+        throw new TypeError('TypecheckingService requires config.workerUrl')
+      }
+      this.workerBlobUrl = runtimeConfig.workerBlobUrl || null
+      this.selectedStubBundle = runtimeConfig.stubBundle || null
+      if (generation !== this.generation || this.status === 'disposed') {
+        this.releaseWorkerBlob()
+        throw new Error('TypecheckingService was disposed during initialization')
+      }
+      return this.createLSPClient({ ...config, ...runtimeConfig })
+    }).then(result => {
       if (generation !== this.generation || this.status === 'disposed') {
         this.closeResult(result)
         throw new Error('TypecheckingService was disposed during initialization')
