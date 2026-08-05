@@ -1599,6 +1599,18 @@ function decodeText(bytes) {
     }
 }
 
+function hydrateCachedPython() {
+    const files = {}
+    for (const path of fsCache.knownPaths()) {
+        if (!path.endsWith('.py')) { continue }
+        const bytes = fsCache.peek(path)
+        if (!bytes) { continue }
+        const text = decodeText(bytes)
+        if (text !== null) { files[path] = text }
+    }
+    return typechecking.hydrateWorkspace(files)
+}
+
 async function _loadContent(fn, content, editorElement, { external=null } = {}) {
     /* The name the tab carries, which is what the cache is keyed on. Disassembly
        renames `fn` below, and a move renames the tab later, so neither the
@@ -2517,6 +2529,7 @@ function showOfflineReadyToast(version) {
     document.addEventListener("editorLoaded", (event) => {
         if (!supportsTypechecking(event.detail.fn, event.detail.editor.state.readOnly)) { return }
         typechecking.bindEditor(event.detail.editor, event.detail.fn).
+            then(() => hydrateCachedPython()).
             catch(err => report('Unable to enable type checking for this file', err))
     })
     document.addEventListener("tabClosed", (event) => {
@@ -2549,7 +2562,9 @@ function showOfflineReadyToast(version) {
     }, 100)
 
     // Type checking is independent of device transport and remains alive across reconnects.
-    typechecking.initialize().catch(err => report('Unable to start type checking', err))
+    typechecking.initialize().
+        then(() => hydrateCachedPython()).
+        catch(err => report('Unable to start type checking', err))
     window.addEventListener('pagehide', event => {
         // A bfcache page remains live and must retain its worker for restoration.
         if (!event.persisted) { typechecking.dispose() }

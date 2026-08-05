@@ -214,6 +214,26 @@ describe('TypecheckingService', () => {
         assert.strictEqual(service.editorBindings.size, 0)
     })
 
+    it('hydrates only uncached Python workspace files without opening them', async () => {
+        const result = resources()
+        const synced = []
+        result.transport.syncWorkspaceFile = (path, content) => synced.push({ path, content })
+        const service = new TypecheckingService({ createLSPClient: async () => result })
+        await service.initialize({ workerUrl: 'blob:worker' })
+
+        const first = service.hydrateWorkspace({
+            'lib/helper.py': 'answer = 42',
+            'README.md': '# ignored',
+            'data.py': new Uint8Array([1]),
+        })
+        const second = service.hydrateWorkspace({ 'lib/helper.py': 'answer = 43' })
+
+        assert.strictEqual(first, 1)
+        assert.strictEqual(second, 0)
+        assert.deepEqual(synced, [{ path: 'lib/helper.py', content: 'answer = 42' }])
+        assert.strictEqual(service.documentVersions.size, 0)
+    })
+
     it('validates editor integration configuration', () => {
         const service = new TypecheckingService({ createLSPClient: async () => resources() })
 

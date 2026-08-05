@@ -194,6 +194,7 @@ export class TypecheckingService {
         this.unbindEditor(editorView)
       }
     }
+
     if (this.status !== 'ready') { return }
     const target = this.workspacePath(path)
     let deleted = false
@@ -208,6 +209,20 @@ export class TypecheckingService {
       // A removed file may not have been opened during this session.
       this.transport.deleteWorkspaceFile(target)
     }
+  }
+
+  hydrateWorkspace(files) {
+    if (this.status !== 'ready') { return 0 }
+    let hydrated = 0
+    for (const [path, content] of Object.entries(files)) {
+      if (!path.endsWith('.py') || typeof content !== 'string') { continue }
+      const workspacePath = this.workspacePath(path)
+      if (this.workspacePaths.has(workspacePath)) { continue }
+      this.transport.syncWorkspaceFile(workspacePath, content)
+      this.workspacePaths.add(workspacePath)
+      hydrated++
+    }
+    return hydrated
   }
 
   uriForPath(path) {
