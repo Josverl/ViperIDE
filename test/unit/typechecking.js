@@ -101,7 +101,10 @@ describe('TypecheckingService', () => {
 
         const state = service.snapshot()
         assert.strictEqual(state.documentVersions.get(uri), 2)
-        assert.deepEqual(state.diagnosticStatus.get(uri), [{ message: 'bad type' }])
+        assert.deepEqual(state.diagnosticStatus.get(uri), [{
+            message: 'bad type',
+            source: 'Pyright',
+        }])
 
         service.closeDocument(uri)
         assert.isFalse(service.snapshot().documentVersions.has(uri))

@@ -339,7 +339,11 @@ export class TypecheckingService {
     if (!this.documentVersions.has(uri)) {
       throw new Error(`Document is not open: ${uri}`)
     }
-    this.diagnosticStatus.set(uri, [...diagnostics])
+    // Status consumers receive the same producer label shown in CodeMirror's lint UI.
+    this.diagnosticStatus.set(uri, diagnostics.map(diagnostic => ({
+      ...diagnostic,
+      source: diagnostic.source || 'Pyright',
+    })))
   }
 
   snapshot() {
