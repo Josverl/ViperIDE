@@ -3,7 +3,12 @@
  * SPDX-License-Identifier: MIT
  */
 
-import { createLSPClient, createLSPPlugin } from
+import {
+  createLSPClient,
+  createLSPPlugin,
+  notifyDocumentChange,
+  notifyDocumentClose,
+} from
   'https://cdn.jsdelivr.net/gh/Josverl/stubs_playground@lsp-client-v0.2.1/packages/lsp-client/src/index.js'
 
 import { TypecheckingService } from './typechecking_service.js'
@@ -13,6 +18,8 @@ import { typecheckingAssets } from './typechecking_assets.js'
 export const typechecking = new TypecheckingService({
   createLSPClient,
   createLSPPlugin,
+  notifyDocumentChange,
+  notifyDocumentClose,
   prepareRuntime: config => typecheckingAssets.prepare(config.boardId),
   revokeObjectURL: url => {
     URL.revokeObjectURL(url)

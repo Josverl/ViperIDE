@@ -1636,14 +1636,6 @@ async function _loadContent(fn, content, editorElement, { external=null } = {}) 
             devInfo,
             readOnly,
         })
-        if (supportsTypechecking(fn, readOnly)) {
-            try {
-                await typechecking.bindEditor(editor, fn)
-            } catch (err) {
-                // Type-checking failures must never prevent a file from opening.
-                report('Unable to enable type checking for this file', err)
-            }
-        }
         /* The text as handed to the editor, which is not the bytes on the device
            for prettified JSON or a disassembly. Comparing against this is what
            makes an undo clear the marker again. */
@@ -1655,7 +1647,11 @@ async function _loadContent(fn, content, editorElement, { external=null } = {}) 
             if (!update.docChanged) return
             // The tab knows the current name; this one goes stale on a move
             const key = getTabFileName(editorElement) || tabFn
-            scheduleSync(() => setDirty(key, fsCache.setDraft(key, update.state.doc.toString())))
+            scheduleSync(() => {
+                const text = update.state.doc.toString()
+                setDirty(key, fsCache.setDraft(key, text))
+                typechecking.changeEditor(editor, text)
+            })
         })
 
         editorFn = fn
@@ -2518,13 +2514,29 @@ function showOfflineReadyToast(version) {
         editorFn = event.detail.fn
         markFile(event.detail.fn, 'open', true)
     })
+    document.addEventListener("editorLoaded", (event) => {
+        if (!supportsTypechecking(event.detail.fn, event.detail.editor.state.readOnly)) { return }
+        typechecking.bindEditor(event.detail.editor, event.detail.fn).
+            catch(err => report('Unable to enable type checking for this file', err))
+    })
     document.addEventListener("tabClosed", (event) => {
+        const closedEditor = getEditorFromElement(event.detail.editorElement)
+        if (closedEditor) { typechecking.unbindEditor(closedEditor) }
         markFile(event.detail.fn, 'open', false)
         markFile(event.detail.fn, 'changed', false)
         markFile(event.detail.fn, 'conflict', false)
         /* Closing already asked about discarding unsaved changes, so the backup
            has to go with them */
         fsCache.closeView(event.detail.fn)
+    })
+    document.addEventListener("fileRenamed", event => {
+        typechecking.renamePath(event.detail.old, event.detail.new)
+    })
+    document.addEventListener("fileRemoved", event => {
+        typechecking.removePath(event.detail.path)
+    })
+    document.addEventListener("dirRemoved", event => {
+        typechecking.removePath(event.detail.path, true)
     })
     /* Closing the last tab would leave the editor area blank and `editor`
        pointing at a view that is no longer in the document */

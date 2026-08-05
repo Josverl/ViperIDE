@@ -25,9 +25,15 @@ function resources() {
         },
         transport: {
             closeCalls: 0,
+            syncWorkspaceFile() {},
+            deleteWorkspaceFile() {},
             close() { this.closeCalls++ },
         },
     }
+}
+
+function editor(text = 'print(1)') {
+    return { state: { doc: { toString: () => text } } }
 }
 
 describe('TypecheckingService', () => {
@@ -110,7 +116,7 @@ describe('TypecheckingService', () => {
             },
         })
         await service.initialize({ workerUrl: 'blob:worker' })
-        const view = { state: { doc: { toString: () => 'print(1)' } } }
+        const view = editor()
 
         const uri = await service.bindEditor(view, '/lib/my file.py')
 
@@ -128,7 +134,7 @@ describe('TypecheckingService', () => {
             configureEditor: () => false,
         })
         await service.initialize({ workerUrl: 'blob:worker' })
-        const view = { state: { doc: { toString: () => '' } } }
+        const view = editor('')
 
         assert.throws(() => service.uriForPath('../main.py'), /Invalid document path/)
         let caught
@@ -138,6 +144,74 @@ describe('TypecheckingService', () => {
             caught = error
         }
         assert.match(caught.message, /does not support type checking/)
+    })
+
+    it('changes, renames, and closes bound documents', async () => {
+        const result = resources()
+        result.transport.synced = []
+        result.transport.deleted = []
+        result.transport.syncWorkspaceFile = (path, content) =>
+            result.transport.synced.push({ path, content })
+        result.transport.deleteWorkspaceFile = path => result.transport.deleted.push(path)
+        const changes = []
+        const closes = []
+        const configured = []
+        const service = new TypecheckingService({
+            createLSPClient: async () => result,
+            createLSPPlugin: (_client, _view, options) => [`lsp:${options.fileUri}`],
+            configureEditor: (_view, extensions) => {
+                configured.push(extensions)
+                return true
+            },
+            notifyDocumentChange: (_client, uri, content, version) =>
+                changes.push({ uri, content, version }),
+            notifyDocumentClose: (_client, uri) => closes.push(uri),
+        })
+        await service.initialize({ workerUrl: 'blob:worker' })
+        const view = editor('updated')
+        await service.bindEditor(view, 'lib/main.py')
+
+        assert.isTrue(service.changeEditor(view, 'changed'))
+        service.renamePath('lib', 'src')
+        assert.isTrue(service.unbindEditor(view))
+
+        assert.deepEqual(changes, [{
+            uri: 'file:///workspace/lib/main.py',
+            content: 'changed',
+            version: 2,
+        }])
+        assert.deepEqual(closes, [
+            'file:///workspace/lib/main.py',
+            'file:///workspace/src/main.py',
+        ])
+        assert.deepEqual(result.transport.deleted, ['lib/main.py'])
+        assert.deepEqual(result.transport.synced, [
+            { path: 'lib/main.py', content: 'updated' },
+            { path: 'lib/main.py', content: 'changed' },
+            { path: 'src/main.py', content: 'updated' },
+        ])
+        assert.deepEqual(configured.at(-1), [])
+    })
+
+    it('deletes known workspace files below a removed directory', async () => {
+        const result = resources()
+        result.transport.deleted = []
+        result.transport.syncWorkspaceFile = () => {}
+        result.transport.deleteWorkspaceFile = path => result.transport.deleted.push(path)
+        const service = new TypecheckingService({
+            createLSPClient: async () => result,
+            createLSPPlugin: () => [],
+            configureEditor: () => true,
+            notifyDocumentClose: () => {},
+        })
+        await service.initialize({ workerUrl: 'blob:worker' })
+        await service.bindEditor(editor(), 'lib/a.py')
+        await service.bindEditor(editor(), 'lib/nested/b.py')
+
+        service.removePath('lib', true)
+
+        assert.deepEqual(result.transport.deleted.sort(), ['lib/a.py', 'lib/nested/b.py'])
+        assert.strictEqual(service.editorBindings.size, 0)
     })
 
     it('validates editor integration configuration', () => {

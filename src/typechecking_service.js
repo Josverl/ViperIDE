@@ -9,6 +9,8 @@ export class TypecheckingService {
     createLSPClient,
     createLSPPlugin = null,
     configureEditor = null,
+    notifyDocumentChange = null,
+    notifyDocumentClose = null,
     prepareRuntime = null,
     revokeObjectURL = URL.revokeObjectURL.bind(URL),
   }) {
@@ -18,6 +20,8 @@ export class TypecheckingService {
     this.createLSPClient = createLSPClient
     this.createLSPPlugin = createLSPPlugin
     this.configureEditor = configureEditor
+    this.notifyDocumentChange = notifyDocumentChange
+    this.notifyDocumentClose = notifyDocumentClose
     this.prepareRuntime = prepareRuntime
     this.revokeObjectURL = revokeObjectURL
     this.client = null
@@ -26,7 +30,8 @@ export class TypecheckingService {
     this.selectedStubBundle = null
     this.documentVersions = new Map()
     this.diagnosticStatus = new Map()
-    this.editorBindings = new WeakMap()
+    this.editorBindings = new Map()
+    this.workspacePaths = new Set()
     this.status = 'idle'
     this.error = null
     this.initializing = null
@@ -111,6 +116,9 @@ export class TypecheckingService {
 
     const uri = this.uriForPath(path)
     const content = editorView.state.doc.toString()
+    const workspacePath = this.workspacePath(path)
+    this.transport.syncWorkspaceFile(workspacePath, content)
+    this.workspacePaths.add(workspacePath)
     this.openDocument(uri)
     const extensions = this.createLSPPlugin(this.client, editorView, {
       fileUri: uri,
@@ -122,11 +130,91 @@ export class TypecheckingService {
       this.closeDocument(uri)
       throw new Error(`Editor does not support type checking: ${path}`)
     }
-    this.editorBindings.set(editorView, { uri })
+    this.editorBindings.set(editorView, { path, uri })
     return uri
   }
 
+  changeEditor(editorView, content) {
+    const binding = this.editorBindings.get(editorView)
+    if (!binding || this.status !== 'ready') { return false }
+    this.transport.syncWorkspaceFile(this.workspacePath(binding.path), content)
+    const version = this.changeDocument(binding.uri)
+    this.notifyDocumentChange(this.client, binding.uri, content, version)
+    return true
+  }
+
+  unbindEditor(editorView) {
+    const binding = this.editorBindings.get(editorView)
+    if (!binding) { return false }
+    if (this.status === 'ready') {
+      this.notifyDocumentClose(this.client, binding.uri)
+      this.configureEditor(editorView, [])
+    }
+    this.closeDocument(binding.uri)
+    this.editorBindings.delete(editorView)
+    return true
+  }
+
+  renamePath(oldPath, newPath) {
+    if (this.status !== 'ready') { return }
+    for (const [editorView, binding] of this.editorBindings) {
+      const renamed = binding.path === oldPath
+        ? newPath
+        : binding.path.startsWith(`${oldPath}/`)
+          ? newPath + binding.path.slice(oldPath.length)
+          : null
+      if (!renamed) { continue }
+
+      const content = editorView.state.doc.toString()
+      this.notifyDocumentClose(this.client, binding.uri)
+      const oldWorkspacePath = this.workspacePath(binding.path)
+      this.transport.deleteWorkspaceFile(oldWorkspacePath)
+      this.workspacePaths.delete(oldWorkspacePath)
+      this.closeDocument(binding.uri)
+
+      const uri = this.uriForPath(renamed)
+      const newWorkspacePath = this.workspacePath(renamed)
+      this.transport.syncWorkspaceFile(newWorkspacePath, content)
+      this.workspacePaths.add(newWorkspacePath)
+      this.openDocument(uri)
+      const extensions = this.createLSPPlugin(this.client, editorView, {
+        fileUri: uri,
+        languageId: 'python',
+        initialContent: content,
+        onDiagnosticsChange: diagnostics => this.setDiagnosticStatus(uri, diagnostics),
+      })
+      this.configureEditor(editorView, extensions)
+      this.editorBindings.set(editorView, { path: renamed, uri })
+    }
+  }
+
+  removePath(path, recursive = false) {
+    for (const [editorView, binding] of [...this.editorBindings]) {
+      if (binding.path === path || (recursive && binding.path.startsWith(`${path}/`))) {
+        this.unbindEditor(editorView)
+      }
+    }
+    if (this.status !== 'ready') { return }
+    const target = this.workspacePath(path)
+    let deleted = false
+    for (const workspacePath of [...this.workspacePaths]) {
+      if (workspacePath === target || (recursive && workspacePath.startsWith(`${target}/`))) {
+        this.transport.deleteWorkspaceFile(workspacePath)
+        this.workspacePaths.delete(workspacePath)
+        deleted = true
+      }
+    }
+    if (!recursive && !deleted) {
+      // A removed file may not have been opened during this session.
+      this.transport.deleteWorkspaceFile(target)
+    }
+  }
+
   uriForPath(path) {
+    return `file:///workspace/${this.workspacePath(path).split('/').map(encodeURIComponent).join('/')}`
+  }
+
+  workspacePath(path) {
     if (typeof path !== 'string' || !path.trim()) {
       throw new TypeError('Document path is required')
     }
@@ -135,7 +223,7 @@ export class TypecheckingService {
     if (segments.some(segment => !segment || segment === '.' || segment === '..')) {
       throw new TypeError(`Invalid document path: ${path}`)
     }
-    return `file:///workspace/${segments.map(encodeURIComponent).join('/')}`
+    return segments.join('/')
   }
 
   changeDocument(uri) {
@@ -182,7 +270,8 @@ export class TypecheckingService {
     this.transport = null
     this.documentVersions.clear()
     this.diagnosticStatus.clear()
-    this.editorBindings = new WeakMap()
+    this.editorBindings.clear()
+    this.workspacePaths.clear()
     this.releaseWorkerBlob()
   }
 
