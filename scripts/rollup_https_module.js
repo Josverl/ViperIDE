@@ -1,3 +1,8 @@
+/*
+ * SPDX-FileCopyrightText: 2026 Jos Verlinde
+ * SPDX-License-Identifier: MIT
+ */
+
 import path from 'node:path'
 import process from 'node:process'
 
@@ -11,6 +16,7 @@ const JAVASCRIPT_CONTENT_TYPES = new Set([
 const JSDELIVR_ORIGIN = 'https://cdn.jsdelivr.net'
 const IMMUTABLE_TAG = /^lsp-client-v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/
 
+// Validate once at configuration time so the plugin can never become a general URL loader.
 function parseAllowedBase(baseUrl) {
     const url = new URL(baseUrl)
     if (url.origin !== JSDELIVR_ORIGIN || url.search || url.hash) {
@@ -51,6 +57,7 @@ export function httpsModuleLoader({ baseUrl, fetch: fetchModule = globalThis.fet
 
         async resolveId(source, importer) {
             const importerUrl = remoteUrl(importer)
+            // Resolve CodeMirror from ViperIDE to preserve a single editor module graph.
             if (isBareCodeMirrorImport(source) && importerUrl && isWithinBase(importerUrl, base)) {
                 return this.resolve(source, path.join(process.cwd(), 'package.json'), {
                     skipSelf: true,
@@ -96,6 +103,7 @@ export function httpsModuleLoader({ baseUrl, fetch: fetchModule = globalThis.fet
             }
 
             const responseUrl = new URL(response.url || url.href)
+            // fetch follows redirects, so validate the final URL as well as the requested URL.
             if (!isWithinBase(responseUrl, base)) {
                 throw new Error(`Remote module redirected outside the configured immutable base: ${responseUrl.href}`)
             }

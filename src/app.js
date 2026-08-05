@@ -48,6 +48,7 @@ import * as fsCache from './fs_cache.js'
 import { createZipSync } from './zip.js'
 
 import { initControlClient } from './control_client.js'
+import './typechecking.js'
 
 import { library, dom } from '@fortawesome/fontawesome-svg-core'
 import { faUsb, faBluetoothB } from '@fortawesome/free-brands-svg-icons'

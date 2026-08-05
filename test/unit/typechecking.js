@@ -1,6 +1,11 @@
+/*
+ * SPDX-FileCopyrightText: 2026 Jos Verlinde
+ * SPDX-License-Identifier: MIT
+ */
+
 import { assert } from 'chai'
 
-import { TypecheckingService } from '../../src/typechecking.js'
+import { TypecheckingService } from '../../src/typechecking_service.js'
 
 function deferred() {
     let resolve

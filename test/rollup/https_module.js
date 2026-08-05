@@ -1,3 +1,8 @@
+/*
+ * SPDX-FileCopyrightText: 2026 Jos Verlinde
+ * SPDX-License-Identifier: MIT
+ */
+
 import { assert } from 'chai'
 import { rollup } from 'rollup'
 import resolve from '@rollup/plugin-node-resolve'
@@ -52,6 +57,28 @@ async function rejects(promise, match) {
 }
 
 describe('Rollup HTTPS module loader', () => {
+    it('bundles ViperIDE type checking with tagged client and local CodeMirror', async function () {
+        this.timeout(30000)
+        const bundle = await rollup({
+            input: 'src/typechecking.js',
+            plugins: [
+                httpsModuleLoader({ baseUrl: BASE }),
+                resolve(),
+            ],
+            onwarn(warning) {
+                throw new Error(warning.message)
+            },
+        })
+        const moduleIds = [...bundle.cache.modules].map(module => module.id)
+        const { output } = await bundle.generate({ format: 'es' })
+        await bundle.close()
+
+        assert.include(moduleIds, ENTRY)
+        assert.isTrue(moduleIds.some(id =>
+            id.includes('/node_modules/@codemirror/state/dist/index.js')))
+        assert.notMatch(output[0].code, /from ['"]@codemirror\//)
+    })
+
     it('resolves relative modules on the configured immutable tag', async () => {
         const child = `${BASE}packages/lsp-client/src/child.js`
         const { code, requests } = await build({
