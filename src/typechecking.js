@@ -8,6 +8,7 @@ import {
   createLSPPlugin,
   notifyDocumentChange,
   notifyDocumentClose,
+  switchBoard,
 } from
   'https://cdn.jsdelivr.net/gh/Josverl/stubs_playground@lsp-client-v0.2.1/packages/lsp-client/src/index.js'
 
@@ -20,6 +21,7 @@ export const typechecking = new TypecheckingService({
   createLSPPlugin,
   notifyDocumentChange,
   notifyDocumentClose,
+  switchBoard,
   prepareRuntime: config => typecheckingAssets.prepare(config.boardId),
   revokeObjectURL: url => {
     URL.revokeObjectURL(url)

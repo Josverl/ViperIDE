@@ -5,7 +5,7 @@
 
 import { assert } from 'chai'
 
-import { TypecheckingService } from '../../src/typechecking_service.js'
+import { stubTargetForDevice, TypecheckingService } from '../../src/typechecking_service.js'
 
 function deferred() {
     let resolve
@@ -37,6 +37,14 @@ function editor(text = 'print(1)') {
 }
 
 describe('TypecheckingService', () => {
+    it('maps device metadata to the closest available stub target', () => {
+        assert.strictEqual(stubTargetForDevice({ machine: 'ESP32 module' }), 'esp32')
+        assert.strictEqual(stubTargetForDevice({ machine: 'Raspberry Pi Pico W with RP2040' }), 'rp2')
+        assert.strictEqual(stubTargetForDevice({ sysname: 'pyboard', mpy_arch: 'armv7emsp' }), 'stm32')
+        assert.strictEqual(stubTargetForDevice({ version: 'CircuitPython 10.2.0' }), 'circuitpython')
+        assert.strictEqual(stubTargetForDevice({ machine: 'webassembly' }), 'stdlib')
+    })
+
     it('initializes one client and reports owned state', async () => {
         const result = resources()
         let calls = 0
@@ -226,12 +234,49 @@ describe('TypecheckingService', () => {
             'README.md': '# ignored',
             'data.py': new Uint8Array([1]),
         })
+
         const second = service.hydrateWorkspace({ 'lib/helper.py': 'answer = 43' })
 
         assert.strictEqual(first, 1)
         assert.strictEqual(second, 0)
         assert.deepEqual(synced, [{ path: 'lib/helper.py', content: 'answer = 42' }])
         assert.strictEqual(service.documentVersions.size, 0)
+    })
+
+    it('switches changed device stubs and rebinds open editors once', async () => {
+        const first = resources()
+        first.transport.syncWorkspaceFile = () => {}
+        const second = resources()
+        second.transport.synced = []
+        second.transport.syncWorkspaceFile = (path, content) =>
+            second.transport.synced.push({ path, content })
+        let switches = 0
+        const configured = []
+        const service = new TypecheckingService({
+            createLSPClient: async () => first,
+            prepareRuntime: async config => ({
+                workerUrl: 'blob:worker',
+                stubBundle: { id: config.boardId || 'stdlib' },
+                boardStubs: new ArrayBuffer(1),
+            }),
+            switchBoard: async () => { switches++; return second },
+            createLSPPlugin: (_client, _view, options) => [`lsp:${options.fileUri}`],
+            configureEditor: (_view, extensions) => {
+                configured.push(extensions)
+                return true
+            },
+        })
+        await service.initialize({ boardId: 'stdlib' })
+        await service.bindEditor(editor('draft'), 'main.py')
+
+        assert.isTrue(await service.selectDevice({ machine: 'ESP32 module' }))
+        assert.isFalse(await service.selectDevice({ machine: 'ESP32 module' }))
+
+        assert.strictEqual(switches, 1)
+        assert.strictEqual(service.selectedStubBundle.id, 'esp32')
+        assert.deepEqual(second.transport.synced, [{ path: 'main.py', content: 'draft' }])
+        assert.strictEqual(service.documentVersions.get('file:///workspace/main.py'), 1)
+        assert.deepEqual(configured.at(-1), ['lsp:file:///workspace/main.py'])
     })
 
     it('validates editor integration configuration', () => {

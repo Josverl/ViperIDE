@@ -2551,6 +2551,10 @@ function showOfflineReadyToast(version) {
     document.addEventListener("dirRemoved", event => {
         typechecking.removePath(event.detail.path, true)
     })
+    document.addEventListener("deviceConnected", () => {
+        typechecking.selectDevice(devInfo).
+            catch(err => report('Unable to select type-checking stubs', err))
+    })
     /* Closing the last tab would leave the editor area blank and `editor`
        pointing at a view that is no longer in the document */
     document.addEventListener("allTabsClosed", (_event) => {

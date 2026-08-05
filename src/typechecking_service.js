@@ -3,6 +3,23 @@
  * SPDX-License-Identifier: MIT
  */
 
+export function stubTargetForDevice(devInfo = {}) {
+  const identity = [
+    devInfo.machine,
+    devInfo.sysname,
+    devInfo.release,
+    devInfo.version,
+    devInfo.mpy_arch,
+  ].filter(Boolean).join(' ').toLowerCase()
+
+  if (identity.includes('circuitpython')) { return 'circuitpython' }
+  if (/esp32/.test(identity)) { return 'esp32' }
+  if (/rp2|rp2040|rp2350|raspberry pi pico/.test(identity)) { return 'rp2' }
+  if (/stm32|pyboard/.test(identity)) { return 'stm32' }
+  if (/samd/.test(identity)) { return 'samd' }
+  return 'stdlib'
+}
+
 // Owns the application-wide LSP lifecycle and state independently of editor and device UI.
 export class TypecheckingService {
   constructor({
@@ -11,6 +28,7 @@ export class TypecheckingService {
     configureEditor = null,
     notifyDocumentChange = null,
     notifyDocumentClose = null,
+    switchBoard = null,
     prepareRuntime = null,
     revokeObjectURL = URL.revokeObjectURL.bind(URL),
   }) {
@@ -22,6 +40,7 @@ export class TypecheckingService {
     this.configureEditor = configureEditor
     this.notifyDocumentChange = notifyDocumentChange
     this.notifyDocumentClose = notifyDocumentClose
+    this.switchBoard = switchBoard
     this.prepareRuntime = prepareRuntime
     this.revokeObjectURL = revokeObjectURL
     this.client = null
@@ -36,6 +55,8 @@ export class TypecheckingService {
     this.error = null
     this.initializing = null
     this.generation = 0
+    this.clientConfig = null
+    this.switching = null
   }
 
   initialize(config) {
@@ -62,6 +83,7 @@ export class TypecheckingService {
       }
       this.workerBlobUrl = runtimeConfig.workerBlobUrl || null
       this.selectedStubBundle = runtimeConfig.stubBundle || null
+      this.clientConfig = { ...config, ...runtimeConfig }
       if (generation !== this.generation || this.status === 'disposed') {
         this.releaseWorkerBlob()
         throw new Error('TypecheckingService was disposed during initialization')
@@ -223,6 +245,63 @@ export class TypecheckingService {
       hydrated++
     }
     return hydrated
+  }
+
+  async selectDevice(devInfo) {
+    if (this.initializing) { await this.initializing }
+    const boardId = stubTargetForDevice(devInfo)
+    if (this.selectedStubBundle?.id === boardId) { return false }
+    if (this.switching) { return this.switching }
+    if (this.status !== 'ready' || !this.switchBoard || !this.prepareRuntime) {
+      throw new Error('TypecheckingService cannot switch stub bundles')
+    }
+
+    this.switching = this.prepareRuntime({ ...this.clientConfig, boardId }).
+      then(async runtimeConfig => ({
+        result: await this.switchBoard(
+          { client: this.client, transport: this.transport },
+          { ...this.clientConfig, ...runtimeConfig },
+        ),
+        runtimeConfig,
+      })).
+      then(({ result, runtimeConfig }) => {
+        this.client = result.client
+        this.transport = result.transport
+        this.selectedStubBundle = runtimeConfig.stubBundle
+        this.clientConfig = { ...this.clientConfig, ...runtimeConfig, boardId }
+        this.rebindEditors()
+        return true
+      }).
+      catch(error => {
+        this.status = 'error'
+        this.error = error
+        throw error
+      }).
+      finally(() => {
+        this.switching = null
+      })
+    return this.switching
+  }
+
+  rebindEditors() {
+    this.documentVersions.clear()
+    this.diagnosticStatus.clear()
+    this.workspacePaths.clear()
+    for (const [editorView, binding] of this.editorBindings) {
+      const content = editorView.state.doc.toString()
+      const workspacePath = this.workspacePath(binding.path)
+      this.transport.syncWorkspaceFile(workspacePath, content)
+      this.workspacePaths.add(workspacePath)
+      this.openDocument(binding.uri)
+      const extensions = this.createLSPPlugin(this.client, editorView, {
+        fileUri: binding.uri,
+        languageId: 'python',
+        initialContent: content,
+        onDiagnosticsChange: diagnostics =>
+          this.setDiagnosticStatus(binding.uri, diagnostics),
+      })
+      this.configureEditor(editorView, extensions)
+    }
   }
 
   uriForPath(path) {
