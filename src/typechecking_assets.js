@@ -11,7 +11,8 @@ const ASSETS_BASE = `${CDN_ROOT}packages/pyright-worker/assets`
 // Loads immutable worker assets and creates the same-origin Blob shim required by Worker.
 export class TypecheckingAssets {
   constructor({
-    fetch: fetchAsset = globalThis.fetch,
+    // Browser fetch implementations may require their global object as the receiver.
+    fetch: fetchAsset = globalThis.fetch?.bind(globalThis),
     Blob: BlobClass = globalThis.Blob,
     createObjectURL = URL.createObjectURL.bind(URL),
   } = {}) {

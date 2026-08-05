@@ -36,6 +36,22 @@ async function rejects(promise, match) {
 }
 
 describe('TypecheckingAssets', () => {
+    it('binds the default browser fetch implementation to the global object', async () => {
+        const originalFetch = globalThis.fetch
+        globalThis.fetch = async function(url) {
+            assert.strictEqual(this, globalThis)
+            assert.match(url, /stubs-manifest\.json$/)
+            return response({ json: manifest })
+        }
+
+        try {
+            const assets = new TypecheckingAssets()
+            assert.strictEqual(await assets.loadManifest(), manifest)
+        } finally {
+            globalThis.fetch = originalFetch
+        }
+    })
+
     it('loads the manifest and selected stubs from the pinned tag', async () => {
         const requests = []
         const stubs = new Uint8Array([1, 2, 3]).buffer
