@@ -50,6 +50,7 @@ import { createZipSync } from './zip.js'
 
 import { initControlClient } from './control_client.js'
 import { typechecking } from './typechecking.js'
+import { renderTypecheckingStatus } from './typechecking_status.js'
 import { readDevicePythonWorkspace } from './typechecking_workspace.js'
 
 typechecking.setEditorIntegration(configureTypechecking)
@@ -121,6 +122,8 @@ let reconnectToken = 0
 /* True while the user is letting the device go, so the disconnect callback that
    the teardown itself triggers is not mistaken for the device dropping out */
 let intentionalDisconnect = false
+const typecheckingConfig = { extraPaths: ['/workspace/lib'] }
+let typecheckingAction = Promise.resolve()
 
 const isBusyState = () => deviceState === 'busy-initial' || deviceState === 'busy-running'
 const portReady = () => !!port && deviceState === 'ready'
@@ -176,6 +179,49 @@ function setDeviceState(newState) {
     }
 
     replMonitor.setWatchPrompt(isBusyState())
+}
+
+function updateTypecheckingUI(snapshot = typechecking.snapshot()) {
+    renderTypecheckingStatus(
+        QID('typechecking-status'),
+        QID('typechecking-enabled'),
+        snapshot,
+        getSetting('typechecking-enabled'),
+    )
+}
+
+async function applyTypecheckingSetting(enabled) {
+    if (!enabled) {
+        typechecking.disable()
+        return
+    }
+
+    await typechecking.initialize(typecheckingConfig)
+    if (devInfo) {
+        await typechecking.selectDevice(devInfo)
+    }
+}
+
+function queueTypecheckingSetting(enabled) {
+    typecheckingAction = typecheckingAction.
+        then(() => applyTypecheckingSetting(enabled)).
+        catch(err => report(enabled ? 'Unable to start type checking' : 'Unable to disable type checking', err))
+    return typecheckingAction
+}
+
+function queueTypecheckingDeviceSelection() {
+    typecheckingAction = typecheckingAction.
+        then(() => {
+            if (!getSetting('typechecking-enabled') || !devInfo) { return }
+            return typechecking.selectDevice(devInfo)
+        }).
+        catch(err => report('Unable to select type-checking stubs', err))
+    return typecheckingAction
+}
+
+export function toggleTypechecking() {
+    const current = getSetting('typechecking-enabled')
+    updateSetting('typechecking-enabled', !current)
 }
 
 function setRunMode(on) {
@@ -2374,6 +2420,9 @@ function showOfflineReadyToast(version) {
         term.options.fontSize = (size * 0.9).toFixed(1)
     })
 
+    typechecking.onStatusChange(updateTypecheckingUI)
+    onSettingChange('typechecking-enabled', queueTypecheckingSetting)
+
     initLaunchHandler()
     applyTranslation()
 
@@ -2548,8 +2597,7 @@ function showOfflineReadyToast(version) {
         typechecking.removePath(event.detail.path, true)
     })
     document.addEventListener("deviceConnected", () => {
-        typechecking.selectDevice(devInfo).
-            catch(err => report('Unable to select type-checking stubs', err))
+        queueTypecheckingDeviceSelection()
     })
     /* Closing the last tab would leave the editor area blank and `editor`
        pointing at a view that is no longer in the document */
@@ -2562,8 +2610,7 @@ function showOfflineReadyToast(version) {
     }, 100)
 
     // Type checking is independent of device transport and remains alive across reconnects.
-    typechecking.initialize({ extraPaths: ['/workspace/lib'] }).
-        catch(err => report('Unable to start type checking', err))
+    queueTypecheckingSetting(getSetting('typechecking-enabled'))
     window.addEventListener('pagehide', event => {
         // A bfcache page remains live and must retain its worker for restoration.
         if (!event.persisted) { typechecking.dispose() }

@@ -37,6 +37,40 @@ body.loaded {
     user-select: none;
 }
 
+#typechecking-status {
+    font-size: 0.8rem;
+    white-space: nowrap;
+}
+
+#typechecking-status::before {
+    content: "";
+    display: inline-block;
+    width: 0.55em;
+    height: 0.55em;
+    margin-right: 0.4em;
+    border-radius: 50%;
+    background: #888;
+    vertical-align: 0.08em;
+}
+
+#typechecking-status[data-state="ready"]::before {
+    background: #5bcc5b;
+}
+
+#typechecking-status[data-state="starting"]::before,
+#typechecking-status[data-state="switching"]::before {
+    background: var(--accent-color);
+}
+
+#typechecking-status[data-state="error"]::before {
+    background: #ff7272;
+}
+
+#typechecking-status[data-state="disabled"]::before,
+#typechecking-status[data-state="disposed"]::before {
+    background: #888;
+}
+
 #container {
     display: flex;
     flex: 1;

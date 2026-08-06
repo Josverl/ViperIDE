@@ -32,6 +32,8 @@
             <button title="Run File [F5]"        onclick="app.runCurrentFile()"  id="btn-run"><i class="fa-solid fa-circle-play" id="btn-run-icon"></i></button>
         </div>
         <div>
+            <button id="typechecking-status" data-state="starting" aria-pressed="true"
+                    onclick="app.toggleTypechecking()">Type check: Starting</button>
             <button title="Connect WebREPL"      onclick="app.connectDevice('ws')"  id="btn-conn-ws" ><i class="fa-solid fa-link"></i></button>
             <button title="Connect Bluetooth"    onclick="app.connectDevice('ble')" id="btn-conn-ble"><i class="fa-brands fa-bluetooth-b"></i></button>
             <button title="Connect USB/Serial"   onclick="app.connectDevice('usb')" id="btn-conn-usb"><i class="fa-brands fa-usb"></i></button>
@@ -113,6 +115,7 @@
                     <div><input type="checkbox" id="render-markdown" checked/><label for="render-markdown">Enable Markdown viewer</label></div>
                     <div><input type="checkbox" id="refresh-after-run" checked/><label for="refresh-after-run">Refresh files after run</label></div>
                     <div><input type="checkbox" id="auto-soft-reset" checked/><label for="auto-soft-reset">Soft-reset before run</label></div>
+                    <div><input type="checkbox" id="typechecking-enabled" checked/><label for="typechecking-enabled">Enable type checking</label></div>
                     <div class="title-lines" id="menu-line-pkg-mgr">package manager</div>
                     <div><input type="checkbox" id="install-package-source"/><label for="install-package-source">Prefer installing sources (.py)</label></div>
                     <div class="title-lines" id="menu-line-other">other</div>

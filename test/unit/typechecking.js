@@ -140,6 +140,92 @@ describe('TypecheckingService', () => {
         assert.strictEqual(service.documentVersions.get(uri), 1)
     })
 
+    it('registers editors before startup and binds them when initialization completes', async () => {
+        const result = resources()
+        const configured = []
+        const service = new TypecheckingService({
+            createLSPClient: async () => result,
+            createLSPPlugin: (_client, _view, options) => [`lsp:${options.fileUri}`],
+            configureEditor: (_view, extensions) => {
+                configured.push(extensions)
+                return true
+            },
+        })
+        const view = editor('draft')
+
+        const uri = await service.bindEditor(view, 'main.py')
+        await service.initialize({ workerUrl: 'blob:worker' })
+
+        assert.strictEqual(uri, 'file:///workspace/main.py')
+        assert.deepEqual(configured, [['lsp:file:///workspace/main.py']])
+        assert.strictEqual(service.documentVersions.get(uri), 1)
+    })
+
+    it('disables and re-enables type checking without losing editor bindings', async () => {
+        const first = resources()
+        const second = resources()
+        const results = [first, second]
+        const configured = []
+        const states = []
+        const closes = []
+        const service = new TypecheckingService({
+            createLSPClient: async () => results.shift(),
+            createLSPPlugin: (_client, _view, options) => [`lsp:${options.fileUri}`],
+            configureEditor: (_view, extensions) => {
+                configured.push(extensions)
+                return true
+            },
+            notifyDocumentClose: (_client, uri) => closes.push(uri),
+        })
+        service.onStatusChange(state => states.push(state.status))
+        await service.initialize({ workerUrl: 'blob:first' })
+        const view = editor('draft')
+        await service.bindEditor(view, 'main.py')
+
+        assert.isTrue(service.disable())
+        assert.strictEqual(service.status, 'disabled')
+        assert.strictEqual(service.editorBindings.size, 1)
+        assert.strictEqual(service.documentVersions.size, 0)
+        assert.deepEqual(configured.at(-1), [])
+        assert.deepEqual(closes, ['file:///workspace/main.py'])
+        assert.strictEqual(first.client.disconnectCalls, 1)
+        assert.strictEqual(first.transport.closeCalls, 1)
+
+        await service.initialize({ workerUrl: 'blob:second' })
+
+        assert.strictEqual(service.status, 'ready')
+        assert.strictEqual(service.documentVersions.get('file:///workspace/main.py'), 1)
+        assert.deepEqual(configured.at(-1), ['lsp:file:///workspace/main.py'])
+        assert.includeMembers(states, ['starting', 'ready', 'disabled'])
+    })
+
+    it('closes a failed runtime when a registered editor cannot be rebound', async () => {
+        const result = resources()
+        const service = new TypecheckingService({
+            createLSPClient: async () => result,
+            createLSPPlugin: () => ['lsp-extension'],
+            configureEditor: () => false,
+        })
+        const view = editor('draft')
+        await service.bindEditor(view, 'main.py')
+
+        let caught
+        try {
+            await service.initialize({ workerUrl: 'blob:worker' })
+        } catch (error) {
+            caught = error
+        }
+
+        assert.match(caught.message, /do not support type checking: main.py/)
+        assert.strictEqual(service.status, 'error')
+        assert.strictEqual(service.client, null)
+        assert.strictEqual(service.transport, null)
+        assert.strictEqual(service.editorBindings.size, 0)
+        assert.strictEqual(service.documentVersions.size, 0)
+        assert.strictEqual(result.client.disconnectCalls, 1)
+        assert.strictEqual(result.transport.closeCalls, 1)
+    })
+
     it('rejects invalid document paths and unsupported editors', async () => {
         const service = new TypecheckingService({
             createLSPClient: async () => resources(),

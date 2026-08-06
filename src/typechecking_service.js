@@ -60,6 +60,7 @@ export class TypecheckingService {
     this.generation = 0
     this.clientConfig = null
     this.switching = null
+    this.statusListeners = new Set()
   }
 
   initialize(config) {
@@ -74,8 +75,7 @@ export class TypecheckingService {
     }
     // A generation change prevents a late worker handshake from surviving disposal.
     const generation = this.generation
-    this.status = 'starting'
-    this.error = null
+    this.setStatus('starting', null)
 
     const prepare = this.prepareRuntime
       ? this.prepareRuntime(config || {})
@@ -99,14 +99,13 @@ export class TypecheckingService {
       }
       this.client = result.client
       this.transport = result.transport
-      this.status = 'ready'
-      this.syncWorkspaceSnapshot()
+      this.rebindEditors()
+      this.setStatus('ready', null)
       return this.snapshot()
     }).catch(error => {
       if (this.status !== 'disposed') {
-        this.status = 'error'
-        this.error = error
-        this.releaseWorkerBlob()
+        this.closeRuntime()
+        this.setStatus('error', error)
       }
       throw error
     }).finally(() => {
@@ -147,9 +146,6 @@ export class TypecheckingService {
     if (this.switching) {
       await this.switching
     }
-    if (this.status !== 'ready') {
-      throw new Error(`TypecheckingService is not ready: ${this.status}`)
-    }
     if (!this.createLSPPlugin || !this.configureEditor) {
       throw new Error('TypecheckingService editor integration is not configured')
     }
@@ -158,13 +154,19 @@ export class TypecheckingService {
     const content = editorView.state.doc.toString()
     const workspacePath = this.workspacePath(path)
     this.setWorkspaceFile(workspacePath, content, false)
+    this.editorBindings.set(editorView, { path, uri })
+    if (this.status !== 'ready') {
+      return uri
+    }
+
     this.openDocument(uri)
     const extensions = this.createEditorExtensions(editorView, uri, content)
     if (!this.configureEditor(editorView, extensions)) {
       this.closeDocument(uri)
+      this.editorBindings.delete(editorView)
       throw new Error(`Editor does not support type checking: ${path}`)
     }
-    this.editorBindings.set(editorView, { path, uri })
+    this.emitStatus()
     return uri
   }
 
@@ -186,6 +188,7 @@ export class TypecheckingService {
     }
     this.closeDocument(binding.uri)
     this.editorBindings.delete(editorView)
+    this.emitStatus()
     return true
   }
 
@@ -339,7 +342,7 @@ export class TypecheckingService {
     }
 
     // Block transport users while switchBoard replaces the connected worker.
-    this.status = 'switching'
+    this.setStatus('switching', null)
     this.switching = this.prepareRuntime({ ...this.clientConfig, boardId }).
       then(async runtimeConfig => ({
         result: await this.switchBoard(
@@ -354,12 +357,12 @@ export class TypecheckingService {
         this.selectedStubBundle = runtimeConfig.stubBundle
         this.clientConfig = { ...this.clientConfig, ...runtimeConfig, boardId }
         this.rebindEditors()
-        this.status = 'ready'
+        this.setStatus('ready', null)
         return true
       }).
       catch(error => {
-        this.status = 'error'
-        this.error = error
+        this.closeRuntime()
+        this.setStatus('error', error)
         throw error
       }).
       finally(() => {
@@ -372,11 +375,62 @@ export class TypecheckingService {
     this.documentVersions.clear()
     this.diagnosticStatus.clear()
     this.syncWorkspaceSnapshot()
-    for (const [editorView, binding] of this.editorBindings) {
+    const failedBindings = []
+    for (const [editorView, binding] of [...this.editorBindings]) {
       const content = editorView.state.doc.toString()
       this.openDocument(binding.uri)
       const extensions = this.createEditorExtensions(editorView, binding.uri, content)
-      this.configureEditor(editorView, extensions)
+      if (!this.configureEditor(editorView, extensions)) {
+        this.closeDocument(binding.uri)
+        this.editorBindings.delete(editorView)
+        failedBindings.push(binding.path)
+      }
+    }
+    if (failedBindings.length) {
+      throw new Error(`Editors do not support type checking: ${failedBindings.join(', ')}`)
+    }
+  }
+
+  disable() {
+    if (this.status === 'disabled') { return false }
+    if (this.status === 'starting' || this.status === 'switching') {
+      throw new Error(`TypecheckingService cannot be disabled while ${this.status}`)
+    }
+
+    if (this.client) {
+      for (const [editorView, binding] of this.editorBindings) {
+        if (this.documentVersions.has(binding.uri)) {
+          this.notifyDocumentClose(this.client, binding.uri)
+        }
+        this.configureEditor?.(editorView, [])
+      }
+    }
+
+    this.closeRuntime()
+    this.setStatus('disabled', null)
+    return true
+  }
+
+  onStatusChange(listener) {
+    if (typeof listener !== 'function') {
+      throw new TypeError('TypecheckingService status listener must be a function')
+    }
+    this.statusListeners.add(listener)
+    listener(this.snapshot())
+    return () => this.statusListeners.delete(listener)
+  }
+
+  setStatus(status, error = this.error) {
+    this.status = status
+    this.error = error
+    this.emitStatus()
+  }
+
+  emitStatus() {
+    if (!this.statusListeners.size) { return }
+    const state = this.snapshot()
+    for (const listener of this.statusListeners) {
+      listener(state)
     }
   }
 
@@ -420,6 +474,7 @@ export class TypecheckingService {
       ...diagnostic,
       source: diagnostic.source || 'Pyright',
     })))
+    this.emitStatus()
   }
 
   snapshot() {
@@ -439,7 +494,7 @@ export class TypecheckingService {
   dispose() {
     if (this.status === 'disposed') { return }
     this.generation++
-    this.status = 'disposed'
+    this.setStatus('disposed', null)
     this.closeResult({ client: this.client, transport: this.transport })
     this.client = null
     this.transport = null
@@ -448,11 +503,21 @@ export class TypecheckingService {
     this.editorBindings.clear()
     this.workspaceFiles.clear()
     this.releaseWorkerBlob()
+    this.statusListeners.clear()
   }
 
   closeResult({ client, transport } = {}) {
     client?.disconnect()
     transport?.close()
+  }
+
+  closeRuntime() {
+    this.closeResult({ client: this.client, transport: this.transport })
+    this.client = null
+    this.transport = null
+    this.documentVersions.clear()
+    this.diagnosticStatus.clear()
+    this.releaseWorkerBlob()
   }
 
   releaseWorkerBlob() {
