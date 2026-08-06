@@ -4,8 +4,10 @@
  */
 
 const DIAGNOSTIC_DELAY_MS = 750
+const MICROPYTHON_STUB_TARGETS = new Set(['esp32', 'rp2', 'stm32', 'samd', 'webassembly'])
 
 export function stubTargetForDevice(devInfo = {}) {
+  const platform = String(devInfo.platform || '').trim().toLowerCase()
   const identity = [
     devInfo.machine,
     devInfo.sysname,
@@ -14,12 +16,9 @@ export function stubTargetForDevice(devInfo = {}) {
     devInfo.mpy_arch,
   ].filter(Boolean).join(' ').toLowerCase()
 
+  // CircuitPython uses different stub packages even when sys.platform names the same MCU port.
   if (identity.includes('circuitpython')) { return 'circuitpython' }
-  if (/esp32/.test(identity)) { return 'esp32' }
-  if (/rp2|rp2040|rp2350|raspberry pi pico/.test(identity)) { return 'rp2' }
-  if (/stm32|pyboard/.test(identity)) { return 'stm32' }
-  if (/samd/.test(identity)) { return 'samd' }
-  if (/webassembly/.test(identity)) { return 'webassembly' }
+  if (MICROPYTHON_STUB_TARGETS.has(platform)) { return platform }
   return 'stdlib'
 }
 

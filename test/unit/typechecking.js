@@ -38,12 +38,34 @@ function editor(text = 'print(1)') {
 }
 
 describe('TypecheckingService', () => {
-    it('maps device metadata to the closest available stub target', () => {
-        assert.strictEqual(stubTargetForDevice({ machine: 'ESP32 module' }), 'esp32')
-        assert.strictEqual(stubTargetForDevice({ machine: 'Raspberry Pi Pico W with RP2040' }), 'rp2')
-        assert.strictEqual(stubTargetForDevice({ sysname: 'pyboard', mpy_arch: 'armv7emsp' }), 'stm32')
-        assert.strictEqual(stubTargetForDevice({ version: 'CircuitPython 10.2.0' }), 'circuitpython')
-        assert.strictEqual(stubTargetForDevice({ machine: 'webassembly' }), 'webassembly')
+    it('uses MicroPython sys.platform as the authoritative stub target', () => {
+        assert.strictEqual(stubTargetForDevice({
+            platform: 'rp2',
+            machine: 'Raspberry Pi Pico2 with RP2350',
+        }), 'rp2')
+        assert.strictEqual(stubTargetForDevice({
+            platform: 'rp2',
+            machine: 'misleading ESP32 description',
+        }), 'rp2')
+        assert.strictEqual(stubTargetForDevice({ platform: ' ESP32 ' }), 'esp32')
+        assert.strictEqual(stubTargetForDevice({ platform: 'stm32' }), 'stm32')
+        assert.strictEqual(stubTargetForDevice({ platform: 'samd' }), 'samd')
+        assert.strictEqual(stubTargetForDevice({ platform: 'webassembly' }), 'webassembly')
+        assert.strictEqual(stubTargetForDevice({
+            platform: 'linux',
+            machine: 'misleading ESP32 description',
+        }), 'stdlib')
+    })
+
+    it('detects CircuitPython but does not guess MicroPython ports from descriptive metadata', () => {
+        assert.strictEqual(stubTargetForDevice({
+            platform: 'rp2',
+            version: 'CircuitPython 10.2.0',
+        }), 'circuitpython')
+        assert.strictEqual(stubTargetForDevice({ machine: 'ESP32 module' }), 'stdlib')
+        assert.strictEqual(stubTargetForDevice({ machine: 'Raspberry Pi Pico W with RP2040' }), 'stdlib')
+        assert.strictEqual(stubTargetForDevice({ sysname: 'pyboard', mpy_arch: 'armv7emsp' }), 'stdlib')
+        assert.strictEqual(stubTargetForDevice({ machine: 'webassembly' }), 'stdlib')
     })
 
     it('initializes one client and reports owned state', async () => {
@@ -487,8 +509,8 @@ describe('TypecheckingService', () => {
         await service.bindEditor(editor('draft'), 'main.py')
         service.hydrateWorkspace({ 'foo.py': 'def foofoo(x: str): return 2 * x' })
 
-        assert.isTrue(await service.selectDevice({ machine: 'ESP32 module' }))
-        assert.isFalse(await service.selectDevice({ machine: 'ESP32 module' }))
+        assert.isTrue(await service.selectDevice({ platform: 'esp32', machine: 'ESP32 module' }))
+        assert.isFalse(await service.selectDevice({ platform: 'esp32', machine: 'ESP32 module' }))
 
         assert.strictEqual(switches, 1)
         assert.strictEqual(service.selectedStubBundle.id, 'esp32')
@@ -530,7 +552,7 @@ describe('TypecheckingService', () => {
         })
         await service.initialize({ boardId: 'stdlib' })
 
-        const switching = service.selectDevice({ machine: 'ESP32 module' })
+        const switching = service.selectDevice({ platform: 'esp32', machine: 'ESP32 module' })
         await switchStarted.promise
         const binding = service.bindEditor(editor('opened quickly'), 'fast.py')
 
