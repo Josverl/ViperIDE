@@ -21,6 +21,7 @@ function resources() {
     return {
         client: {
             disconnectCalls: 0,
+            notify() {},
             disconnect() { this.disconnectCalls++ },
         },
         transport: {
@@ -200,7 +201,7 @@ describe('TypecheckingService', () => {
         assert.deepEqual(result.transport.synced, [
             { path: 'lib/main.py', content: 'updated' },
             { path: 'lib/main.py', content: 'changed' },
-            { path: 'src/main.py', content: 'updated' },
+            { path: 'src/main.py', content: 'changed' },
         ])
         assert.deepEqual(configured.at(-1), [])
     })
@@ -226,7 +227,7 @@ describe('TypecheckingService', () => {
         assert.strictEqual(service.editorBindings.size, 0)
     })
 
-    it('hydrates only uncached Python workspace files without opening them', async () => {
+    it('hydrates new and changed Python workspace files without opening them', async () => {
         const result = resources()
         const synced = []
         result.transport.syncWorkspaceFile = (path, content) => synced.push({ path, content })
@@ -242,9 +243,135 @@ describe('TypecheckingService', () => {
         const second = service.hydrateWorkspace({ 'lib/helper.py': 'answer = 43' })
 
         assert.strictEqual(first, 1)
-        assert.strictEqual(second, 0)
-        assert.deepEqual(synced, [{ path: 'lib/helper.py', content: 'answer = 42' }])
+        assert.strictEqual(second, 1)
+        assert.deepEqual(synced, [
+            { path: 'lib/helper.py', content: 'answer = 42' },
+            { path: 'lib/helper.py', content: 'answer = 43' },
+        ])
         assert.strictEqual(service.documentVersions.size, 0)
+    })
+
+    it('queues workspace files before initialization and replays them once ready', async () => {
+        const result = resources()
+        const synced = []
+        result.transport.syncWorkspaceFile = (path, content) => synced.push({ path, content })
+        const service = new TypecheckingService({ createLSPClient: async () => result })
+
+        assert.deepEqual(service.replaceWorkspace({
+            'main.py': 'from foo import foofoo',
+            'foo.py': 'def foofoo(x: str): return 2 * x',
+        }), { synced: 2, deleted: 0, total: 2 })
+        await service.initialize({ workerUrl: 'blob:worker' })
+
+        assert.deepEqual(synced, [
+            { path: 'main.py', content: 'from foo import foofoo' },
+            { path: 'foo.py', content: 'def foofoo(x: str): return 2 * x' },
+        ])
+    })
+
+    it('replaces changed and removed device files while preserving open drafts', async () => {
+        const result = resources()
+        const synced = []
+        const deleted = []
+        const notifications = []
+        result.transport.syncWorkspaceFile = (path, content) => synced.push({ path, content })
+        result.transport.deleteWorkspaceFile = path => deleted.push(path)
+        result.client.notify = (method, params) => notifications.push({ method, params })
+        const service = new TypecheckingService({
+            createLSPClient: async () => result,
+            createLSPPlugin: () => [],
+            configureEditor: () => true,
+        })
+        await service.initialize({ workerUrl: 'blob:worker' })
+        service.replaceWorkspace({
+            'main.py': 'device version',
+            'foo.py': 'answer = 1',
+            'removed.py': 'stale = True',
+        })
+        await service.bindEditor(editor('unsaved draft'), 'main.py')
+        synced.length = 0
+        notifications.length = 0
+
+        const changes = service.replaceWorkspace({
+            'main.py': 'new device version',
+            'foo.py': 'answer = 2',
+            'nested/helper.py': 'value = 3',
+        })
+
+        assert.deepEqual(changes, { synced: 2, deleted: 1, total: 3 })
+        assert.deepEqual(synced, [
+            { path: 'foo.py', content: 'answer = 2' },
+            { path: 'nested/helper.py', content: 'value = 3' },
+        ])
+        assert.deepEqual(deleted, ['removed.py'])
+        assert.deepEqual(notifications, [
+            {
+                method: 'workspace/didChangeWatchedFiles',
+                params: {
+                    changes: [{ uri: 'file:///workspace/removed.py', type: 3 }],
+                },
+            },
+            {
+                method: 'workspace/didChangeWatchedFiles',
+                params: {
+                    changes: [{ uri: 'file:///workspace/foo.py', type: 2 }],
+                },
+            },
+            {
+                method: 'workspace/didChangeWatchedFiles',
+                params: {
+                    changes: [{ uri: 'file:///workspace/nested/helper.py', type: 1 }],
+                },
+            },
+        ])
+        assert.strictEqual(service.snapshot().workspaceFiles.get('main.py'), 'unsaved draft')
+    })
+
+    it('preserves the previous mirror entry when a listed device file cannot be read', async () => {
+        const result = resources()
+        const deleted = []
+        result.transport.deleteWorkspaceFile = path => deleted.push(path)
+        const service = new TypecheckingService({ createLSPClient: async () => result })
+        await service.initialize({ workerUrl: 'blob:worker' })
+        service.replaceWorkspace({
+            'main.py': 'import unreadable',
+            'unreadable.py': 'previous valid content',
+            'removed.py': 'gone',
+        })
+
+        const changes = service.replaceWorkspace(
+            { 'main.py': 'import unreadable' },
+            { preservePaths: ['/unreadable.py'] },
+        )
+
+        assert.deepEqual(changes, { synced: 0, deleted: 1, total: 2 })
+        assert.deepEqual(deleted, ['removed.py'])
+        assert.strictEqual(
+            service.snapshot().workspaceFiles.get('unreadable.py'),
+            'previous valid content',
+        )
+    })
+
+    it('retargets bindings without closing their document during a worker switch', async () => {
+        const result = resources()
+        const service = new TypecheckingService({
+            createLSPClient: async () => result,
+            createLSPPlugin: () => [],
+            configureEditor: () => true,
+        })
+        await service.initialize({ workerUrl: 'blob:worker' })
+        const view = editor('draft')
+        await service.bindEditor(view, 'old.py')
+        service.status = 'switching'
+
+        service.renamePath('old.py', 'new.py')
+
+        assert.strictEqual(
+            service.editorBindings.get(view).uri,
+            'file:///workspace/new.py',
+        )
+        assert.isTrue(service.documentVersions.has('file:///workspace/old.py'))
+        assert.strictEqual(service.snapshot().workspaceFiles.get('new.py'), 'draft')
     })
 
     it('switches changed device stubs and rebinds open editors once', async () => {
@@ -272,13 +399,17 @@ describe('TypecheckingService', () => {
         })
         await service.initialize({ boardId: 'stdlib' })
         await service.bindEditor(editor('draft'), 'main.py')
+        service.hydrateWorkspace({ 'foo.py': 'def foofoo(x: str): return 2 * x' })
 
         assert.isTrue(await service.selectDevice({ machine: 'ESP32 module' }))
         assert.isFalse(await service.selectDevice({ machine: 'ESP32 module' }))
 
         assert.strictEqual(switches, 1)
         assert.strictEqual(service.selectedStubBundle.id, 'esp32')
-        assert.deepEqual(second.transport.synced, [{ path: 'main.py', content: 'draft' }])
+        assert.deepEqual(second.transport.synced, [
+            { path: 'main.py', content: 'draft' },
+            { path: 'foo.py', content: 'def foofoo(x: str): return 2 * x' },
+        ])
         assert.strictEqual(service.documentVersions.get('file:///workspace/main.py'), 1)
         assert.deepEqual(configured.at(-1), ['lsp:file:///workspace/main.py'])
     })

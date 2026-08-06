@@ -53,7 +53,7 @@ export class TypecheckingService {
     this.documentVersions = new Map()
     this.diagnosticStatus = new Map()
     this.editorBindings = new Map()
-    this.workspacePaths = new Set()
+    this.workspaceFiles = new Map()
     this.status = 'idle'
     this.error = null
     this.initializing = null
@@ -100,6 +100,7 @@ export class TypecheckingService {
       this.client = result.client
       this.transport = result.transport
       this.status = 'ready'
+      this.syncWorkspaceSnapshot()
       return this.snapshot()
     }).catch(error => {
       if (this.status !== 'disposed') {
@@ -156,8 +157,7 @@ export class TypecheckingService {
     const uri = this.uriForPath(path)
     const content = editorView.state.doc.toString()
     const workspacePath = this.workspacePath(path)
-    this.transport.syncWorkspaceFile(workspacePath, content)
-    this.workspacePaths.add(workspacePath)
+    this.setWorkspaceFile(workspacePath, content, false)
     this.openDocument(uri)
     const extensions = this.createEditorExtensions(editorView, uri, content)
     if (!this.configureEditor(editorView, extensions)) {
@@ -171,7 +171,7 @@ export class TypecheckingService {
   changeEditor(editorView, content) {
     const binding = this.editorBindings.get(editorView)
     if (!binding || this.status !== 'ready') { return false }
-    this.transport.syncWorkspaceFile(this.workspacePath(binding.path), content)
+    this.setWorkspaceFile(this.workspacePath(binding.path), content, false)
     const version = this.changeDocument(binding.uri)
     this.notifyDocumentChange(this.client, binding.uri, content, version)
     return true
@@ -190,7 +190,25 @@ export class TypecheckingService {
   }
 
   renamePath(oldPath, newPath) {
-    if (this.status !== 'ready') { return }
+    const canSync = this.status === 'ready'
+    const oldTarget = this.workspacePath(oldPath)
+    const newTarget = this.workspacePath(newPath)
+    for (const [workspacePath, content] of [...this.workspaceFiles]) {
+      if (workspacePath !== oldTarget && !workspacePath.startsWith(`${oldTarget}/`)) {
+        continue
+      }
+      const renamedPath = newTarget + workspacePath.slice(oldTarget.length)
+      const destinationExisted = this.workspaceFiles.has(renamedPath)
+      this.workspaceFiles.delete(workspacePath)
+      this.workspaceFiles.set(renamedPath, content)
+      if (canSync) {
+        this.transport.deleteWorkspaceFile(workspacePath)
+        this.transport.syncWorkspaceFile(renamedPath, content)
+        this.notifyWorkspaceChange(workspacePath, 3)
+        this.notifyWorkspaceChange(renamedPath, destinationExisted ? 2 : 1)
+      }
+    }
+
     for (const [editorView, binding] of this.editorBindings) {
       const renamed = binding.path === oldPath
         ? newPath
@@ -200,20 +218,18 @@ export class TypecheckingService {
       if (!renamed) { continue }
 
       const content = editorView.state.doc.toString()
-      this.notifyDocumentClose(this.client, binding.uri)
-      const oldWorkspacePath = this.workspacePath(binding.path)
-      this.transport.deleteWorkspaceFile(oldWorkspacePath)
-      this.workspacePaths.delete(oldWorkspacePath)
-      this.closeDocument(binding.uri)
+      if (canSync) {
+        this.notifyDocumentClose(this.client, binding.uri)
+        this.closeDocument(binding.uri)
+      }
 
       const uri = this.uriForPath(renamed)
-      const newWorkspacePath = this.workspacePath(renamed)
-      this.transport.syncWorkspaceFile(newWorkspacePath, content)
-      this.workspacePaths.add(newWorkspacePath)
-      this.openDocument(uri)
-      const extensions = this.createEditorExtensions(editorView, uri, content)
-      this.configureEditor(editorView, extensions)
       this.editorBindings.set(editorView, { path: renamed, uri })
+      if (canSync) {
+        this.openDocument(uri)
+        const extensions = this.createEditorExtensions(editorView, uri, content)
+        this.configureEditor(editorView, extensions)
+      }
     }
   }
 
@@ -224,34 +240,93 @@ export class TypecheckingService {
       }
     }
 
-    if (this.status !== 'ready') { return }
     const target = this.workspacePath(path)
     let deleted = false
-    for (const workspacePath of [...this.workspacePaths]) {
+    for (const workspacePath of [...this.workspaceFiles.keys()]) {
       if (workspacePath === target || (recursive && workspacePath.startsWith(`${target}/`))) {
-        this.transport.deleteWorkspaceFile(workspacePath)
-        this.workspacePaths.delete(workspacePath)
+        if (this.status === 'ready') {
+          this.transport.deleteWorkspaceFile(workspacePath)
+          this.notifyWorkspaceChange(workspacePath, 3)
+        }
+        this.workspaceFiles.delete(workspacePath)
         deleted = true
       }
     }
-    if (!recursive && !deleted) {
+    if (this.status === 'ready' && !recursive && !deleted) {
       // A removed file may not have been opened during this session.
       this.transport.deleteWorkspaceFile(target)
+      this.notifyWorkspaceChange(target, 3)
     }
   }
 
   hydrateWorkspace(files) {
-    if (this.status !== 'ready') { return 0 }
     let hydrated = 0
-    for (const [path, content] of Object.entries(files)) {
+    for (const [path, content] of Object.entries(files || {})) {
       if (!path.endsWith('.py') || typeof content !== 'string') { continue }
       const workspacePath = this.workspacePath(path)
-      if (this.workspacePaths.has(workspacePath)) { continue }
-      this.transport.syncWorkspaceFile(workspacePath, content)
-      this.workspacePaths.add(workspacePath)
-      hydrated++
+      if (this.setWorkspaceFile(workspacePath, content)) { hydrated++ }
     }
     return hydrated
+  }
+
+  replaceWorkspace(files, { preservePaths = [] } = {}) {
+    const nextFiles = new Map()
+    const preservedWorkspacePaths = new Set(
+      preservePaths.map(path => this.workspacePath(path)),
+    )
+    for (const [path, content] of Object.entries(files || {})) {
+      if (!path.endsWith('.py') || typeof content !== 'string') { continue }
+      nextFiles.set(this.workspacePath(path), content)
+    }
+
+    // Open buffers, including unsaved edits, take precedence over device contents.
+    for (const [editorView, binding] of this.editorBindings) {
+      nextFiles.set(this.workspacePath(binding.path), editorView.state.doc.toString())
+    }
+
+    let deleted = 0
+    for (const workspacePath of [...this.workspaceFiles.keys()]) {
+      if (nextFiles.has(workspacePath) || preservedWorkspacePaths.has(workspacePath)) { continue }
+      this.workspaceFiles.delete(workspacePath)
+      if (this.status === 'ready') {
+        this.transport.deleteWorkspaceFile(workspacePath)
+        this.notifyWorkspaceChange(workspacePath, 3)
+      }
+      deleted++
+    }
+
+    let synced = 0
+    for (const [workspacePath, content] of nextFiles) {
+      if (this.setWorkspaceFile(workspacePath, content)) { synced++ }
+    }
+    return { synced, deleted, total: this.workspaceFiles.size }
+  }
+
+  setWorkspaceFile(workspacePath, content, notifyFileChange = true) {
+    const existed = this.workspaceFiles.has(workspacePath)
+    if (existed && this.workspaceFiles.get(workspacePath) === content) { return false }
+    this.workspaceFiles.set(workspacePath, content)
+    if (this.status === 'ready') {
+      this.transport.syncWorkspaceFile(workspacePath, content)
+      if (notifyFileChange) {
+        this.notifyWorkspaceChange(workspacePath, existed ? 2 : 1)
+      }
+    }
+    return true
+  }
+
+  syncWorkspaceSnapshot() {
+    if (!this.transport) { return }
+    for (const [workspacePath, content] of this.workspaceFiles) {
+      this.transport.syncWorkspaceFile(workspacePath, content)
+      this.notifyWorkspaceChange(workspacePath, 1)
+    }
+  }
+
+  notifyWorkspaceChange(workspacePath, type) {
+    this.client?.notify('workspace/didChangeWatchedFiles', {
+      changes: [{ uri: this.uriForPath(workspacePath), type }],
+    })
   }
 
   async selectDevice(devInfo) {
@@ -296,12 +371,9 @@ export class TypecheckingService {
   rebindEditors() {
     this.documentVersions.clear()
     this.diagnosticStatus.clear()
-    this.workspacePaths.clear()
+    this.syncWorkspaceSnapshot()
     for (const [editorView, binding] of this.editorBindings) {
       const content = editorView.state.doc.toString()
-      const workspacePath = this.workspacePath(binding.path)
-      this.transport.syncWorkspaceFile(workspacePath, content)
-      this.workspacePaths.add(workspacePath)
       this.openDocument(binding.uri)
       const extensions = this.createEditorExtensions(editorView, binding.uri, content)
       this.configureEditor(editorView, extensions)
@@ -360,6 +432,7 @@ export class TypecheckingService {
       selectedStubBundle: this.selectedStubBundle,
       documentVersions: new Map(this.documentVersions),
       diagnosticStatus: new Map(this.diagnosticStatus),
+      workspaceFiles: new Map(this.workspaceFiles),
     }
   }
 
@@ -373,7 +446,7 @@ export class TypecheckingService {
     this.documentVersions.clear()
     this.diagnosticStatus.clear()
     this.editorBindings.clear()
-    this.workspacePaths.clear()
+    this.workspaceFiles.clear()
     this.releaseWorkerBlob()
   }
 

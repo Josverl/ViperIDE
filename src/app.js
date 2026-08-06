@@ -50,6 +50,7 @@ import { createZipSync } from './zip.js'
 
 import { initControlClient } from './control_client.js'
 import { typechecking } from './typechecking.js'
+import { readDevicePythonWorkspace } from './typechecking_workspace.js'
 
 typechecking.setEditorIntegration(configureTypechecking)
 
@@ -1218,6 +1219,13 @@ async function _raw_updateFileTree(raw) {
 
     await _raw_reconcileOpenTabs(raw, delta)
     await _raw_restoreDrafts(raw)
+    const workspace = await readDevicePythonWorkspace(raw, fsCache, isSpecialPath)
+    typechecking.replaceWorkspace(workspace.files, {
+        preservePaths: workspace.errors.map(({ path }) => path),
+    })
+    for (const { path, error } of workspace.errors) {
+        console.warn(`Unable to mirror ${path} for type checking`, error)
+    }
     return delta
 }
 
@@ -1597,18 +1605,6 @@ function decodeText(bytes) {
     } catch (_err) {
         return null
     }
-}
-
-function hydrateCachedPython() {
-    const files = {}
-    for (const path of fsCache.knownPaths()) {
-        if (!path.endsWith('.py')) { continue }
-        const bytes = fsCache.peek(path)
-        if (!bytes) { continue }
-        const text = decodeText(bytes)
-        if (text !== null) { files[path] = text }
-    }
-    return typechecking.hydrateWorkspace(files)
 }
 
 async function _loadContent(fn, content, editorElement, { external=null } = {}) {
@@ -2530,7 +2526,6 @@ function showOfflineReadyToast(version) {
     document.addEventListener("editorLoaded", (event) => {
         if (!supportsTypechecking(event.detail.fn, event.detail.editor.state.readOnly)) { return }
         typechecking.bindEditor(event.detail.editor, event.detail.fn).
-            then(() => hydrateCachedPython()).
             catch(err => report('Unable to enable type checking for this file', err))
     })
     document.addEventListener("tabClosed", (event) => {
@@ -2567,8 +2562,7 @@ function showOfflineReadyToast(version) {
     }, 100)
 
     // Type checking is independent of device transport and remains alive across reconnects.
-    typechecking.initialize().
-        then(() => hydrateCachedPython()).
+    typechecking.initialize({ extraPaths: ['/workspace/lib'] }).
         catch(err => report('Unable to start type checking', err))
     window.addEventListener('pagehide', event => {
         // A bfcache page remains live and must retain its worker for restoration.
