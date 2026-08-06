@@ -8,7 +8,7 @@
 
 import { basicSetup } from 'codemirror'
 import { EditorView, ViewPlugin, keymap, Decoration } from '@codemirror/view'
-import { Compartment, EditorState, RangeSetBuilder, Prec, StateEffect } from '@codemirror/state'
+import { Compartment, EditorState, EditorSelection, RangeSetBuilder, Prec, StateEffect } from '@codemirror/state'
 import { StreamLanguage, indentUnit, syntaxTree, language } from '@codemirror/language'
 import { indentWithTab } from '@codemirror/commands'
 import { python } from '@codemirror/lang-python'
@@ -18,7 +18,7 @@ import { simpleMode } from '@codemirror/legacy-modes/mode/simple-mode'
 import { toml } from '@codemirror/legacy-modes/mode/toml'
 import { monokaiInit } from '@uiw/codemirror-theme-monokai'
 import { tags } from '@lezer/highlight'
-import { linter } from '@codemirror/lint'
+import { forEachDiagnostic, linter } from '@codemirror/lint'
 
 import { validatePython, getRuffWorkspace } from './python_utils.js'
 
@@ -529,4 +529,43 @@ export function getEditorFromElement(element) {
  */
 export function addUpdateHandler(editorView, callback) {
   editorView.dispatch({effects: StateEffect.appendConfig.of(EditorView.updateListener.of(callback))})
+}
+
+
+/**
+ * Move the caret to a 1-based line/character position (the convention used by
+ * LSP-derived diagnostics, see typechecking_service.js) and scroll it into view.
+ *
+ * @param {EditorView} view The CodeMirror editor instance to reposition
+ * @param {number} line One-based line number
+ * @param {number} [character=1] One-based character offset within the line
+ */
+export function goToDocumentPosition(view, line, character = 1) {
+  const doc = view.state.doc
+  const lineInfo = doc.line(Math.min(Math.max(line, 1), doc.lines))
+  const pos = Math.min(lineInfo.from + Math.max(character - 1, 0), lineInfo.to)
+  view.dispatch({
+    selection: EditorSelection.cursor(pos),
+    effects: EditorView.scrollIntoView(pos, { y: 'center' }),
+  })
+  view.focus()
+}
+
+/**
+ * Return every CodeMirror diagnostic currently attached to an editor. This
+ * includes Pyright, Ruff, mpy-cross, and format-specific linters.
+ */
+export function getEditorDiagnostics(view) {
+  const diagnostics = []
+  forEachDiagnostic(view.state, (diagnostic, from) => {
+    const line = view.state.doc.lineAt(from)
+    diagnostics.push({
+      line: line.number,
+      character: from - line.from + 1,
+      message: diagnostic.message,
+      severity: diagnostic.severity === 'hint' ? 'info' : diagnostic.severity,
+      source: diagnostic.source || '',
+    })
+  })
+  return diagnostics
 }

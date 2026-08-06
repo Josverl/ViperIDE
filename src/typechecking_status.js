@@ -3,13 +3,29 @@
  * SPDX-License-Identifier: MIT
  */
 
-function diagnosticCounts(diagnosticStatus) {
-    const counts = { errors: 0, warnings: 0 }
+/**
+ * Flatten Pyright's per-editor `diagnosticStatus` map into a deduplicated list
+ * used by the Pyright status summary.
+ *
+ * Every open editor's map entry carries a full workspace-wide diagnostics
+ * snapshot (see TypecheckingService#setDiagnosticStatus), so the same
+ * diagnostic normally appears once per open document. The diagnostics panel
+ * separately reads CodeMirror's merged lint state so it can also include Ruff
+ * and mpy-cross results.
+ *
+ * @param {Map<string, object[]>} diagnosticStatus Snapshot of
+ *   `TypecheckingService#diagnosticStatus`.
+ * @returns {object[]} Deduplicated diagnostic entries, each carrying at least
+ *   `uri`, `line`, `character`, `message`, and `severity`.
+ */
+export function collectDiagnosticEntries(diagnosticStatus) {
+    const entries = []
     const seen = new Set()
     for (const [documentUri, diagnostics] of diagnosticStatus?.entries?.() || []) {
         for (const diagnostic of diagnostics) {
+            const uri = diagnostic.uri || documentUri
             const key = [
-                diagnostic.uri || documentUri,
+                uri,
                 diagnostic.line,
                 diagnostic.character,
                 diagnostic.message,
@@ -17,9 +33,17 @@ function diagnosticCounts(diagnosticStatus) {
             ].join('\0')
             if (seen.has(key)) { continue }
             seen.add(key)
-            if (diagnostic.severity === 'error') { counts.errors++ }
-            if (diagnostic.severity === 'warning') { counts.warnings++ }
+            entries.push({ ...diagnostic, uri })
         }
+    }
+    return entries
+}
+
+function diagnosticCounts(diagnosticStatus) {
+    const counts = { errors: 0, warnings: 0 }
+    for (const diagnostic of collectDiagnosticEntries(diagnosticStatus)) {
+        if (diagnostic.severity === 'error') { counts.errors++ }
+        if (diagnostic.severity === 'warning') { counts.warnings++ }
     }
     return counts
 }
@@ -48,10 +72,13 @@ export function typecheckingStatusPresentation(snapshot, enabled) {
     case 'ready': {
         const summary = `${counts.errors} error${counts.errors === 1 ? '' : 's'}, ` +
             `${counts.warnings} warning${counts.warnings === 1 ? '' : 's'}`
+        const detail = (counts.errors || counts.warnings)
+            ? ' See the Type check tab for details.'
+            : ''
         return {
             state,
             label: `Type check: ${counts.errors ? `${counts.errors} error${counts.errors === 1 ? '' : 's'}` : 'Ready'}`,
-            title: `Pyright is ready in ${mode} mode with ${board} stubs (${summary}). Click to disable.`,
+            title: `Pyright is ready in ${mode} mode with ${board} stubs (${summary}).${detail} Click to disable.`,
             busy: false,
         }
     }

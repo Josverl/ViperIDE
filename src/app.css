@@ -71,6 +71,29 @@ body.loaded {
     background: #888;
 }
 
+#diagnostics-badge {
+    display: inline-block;
+    min-width: 1.2em;
+    margin-left: 0.2em;
+    padding: 0 0.3em;
+    border-radius: 0.7em;
+    background: #666;
+    font-size: 0.75em;
+    text-align: center;
+}
+
+#diagnostics-badge:empty {
+    display: none;
+}
+
+#diagnostics-badge[data-severity="error"] {
+    background: #b33;
+}
+
+#diagnostics-badge[data-severity="warning"] {
+    background: #a76e00;
+}
+
 #container {
     display: flex;
     flex: 1;
@@ -208,6 +231,91 @@ body.loaded {
 #xterm {
     height: 0px;
     background: var(--bg-color-edit);
+}
+
+#diagnostics {
+    height: 0;
+    overflow: auto;
+    padding: 0;
+    background: var(--bg-color-edit);
+}
+
+#diagnostics-controls {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    gap: 0.7em;
+    padding: 0.45em 0.7em;
+    background: var(--bg-color);
+    border-bottom: 1px solid #ffffff20;
+}
+
+#diagnostics-controls select {
+    max-width: 18em;
+}
+
+#diagnostics-severities {
+    display: flex;
+    gap: 0.6em;
+    padding: 0;
+    border: 0;
+}
+
+#diagnostics-severities legend {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+}
+
+#diagnostics-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.diagnostic-item {
+    display: grid;
+    grid-template-columns: 5.5em minmax(10em, 18em) 1fr auto;
+    gap: 0.7em;
+    width: 100%;
+    padding: 0.45em 0.7em;
+    border-bottom: 1px solid #ffffff12;
+    font-size: 0.9rem;
+    text-align: left;
+}
+
+.diagnostic-item:hover,
+.diagnostic-item:focus-visible {
+    background: #ffffff12;
+}
+
+.diagnostic-severity {
+    text-transform: capitalize;
+}
+
+.diagnostic-item[data-severity="error"] .diagnostic-severity {
+    color: #ff7272;
+}
+
+.diagnostic-item[data-severity="warning"] .diagnostic-severity {
+    color: gold;
+}
+
+.diagnostic-item[data-severity="info"] .diagnostic-severity,
+.diagnostic-source {
+    color: #aaa;
+}
+
+.diagnostic-message {
+    overflow-wrap: anywhere;
+}
+
+.diagnostics-empty {
+    padding: 1em;
+    color: #aaa;
 }
 
 .marked-viewer {

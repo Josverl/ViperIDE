@@ -21,8 +21,8 @@ import { WebLinksAddon } from '@xterm/addon-web-links'
 import { FitAddon } from '@xterm/addon-fit'
 
 import { isStandalonePWA } from 'is-standalone-pwa';
-import { addUpdateHandler, configureTypechecking, createNewEditor, getEditorFromElement,
-         supportsTypechecking } from './editor.js'
+import { addUpdateHandler, configureTypechecking, createNewEditor, getEditorDiagnostics,
+         getEditorFromElement, goToDocumentPosition, supportsTypechecking } from './editor.js'
 import { displayOpenFile, createTab, getTabFileName, getTabEditorElement } from './editor_tabs.js'
 import { serial as webSerialPolyfill } from 'web-serial-polyfill'
 import { WebSerial, WebBluetooth, WebSocketREPL, WebRTCTransport } from './transports/index.js'
@@ -58,6 +58,11 @@ import { initControlClient } from './control_client.js'
 import { loadTypecheckingStubManifest, typechecking } from './typechecking.js'
 import { renderTypecheckingStatus } from './typechecking_status.js'
 import { readDevicePythonWorkspace } from './typechecking_workspace.js'
+import {
+    diagnosticsPanelPresentation,
+    normalizeDiagnosticsFilters,
+    renderDiagnosticsPanel,
+} from './diagnostics_panel.js'
 
 typechecking.setEditorIntegration(configureTypechecking)
 
@@ -66,7 +71,7 @@ import { faUsb, faBluetoothB } from '@fortawesome/free-brands-svg-icons'
 import { faLink, faBars, faDownload, faCirclePlay, faCircleStop, faFolder, faFile, faFileCircleExclamation, faCubes, faGear,
          faCube, faTools, faSliders, faCircleInfo, faStar, faExpand, faCertificate,
          faPlug, faArrowUpRightFromSquare, faTerminal, faBug, faGaugeHigh,
-         faTrashCan, faArrowsRotate, faPowerOff, faPlus, faXmark,
+         faTrashCan, faArrowsRotate, faPowerOff, faPlus, faSquareCheck, faXmark,
          faFolderOpen
        } from '@fortawesome/free-solid-svg-icons'
 import { faMessage, faCircleDown } from '@fortawesome/free-regular-svg-icons'
@@ -75,7 +80,7 @@ library.add(faUsb, faBluetoothB)
 library.add(faLink, faBars, faDownload, faCirclePlay, faCircleStop, faFolder, faFile, faFileCircleExclamation, faCubes, faGear,
          faCube, faTools, faSliders, faCircleInfo, faStar, faExpand, faCertificate,
          faPlug, faArrowUpRightFromSquare, faTerminal, faBug, faGaugeHigh,
-         faTrashCan, faArrowsRotate, faPowerOff, faPlus, faXmark,
+         faTrashCan, faArrowsRotate, faPowerOff, faPlus, faSquareCheck, faXmark,
          faFolderOpen)
 library.add(faMessage, faCircleDown)
 dom.watch()
@@ -130,6 +135,7 @@ let reconnectToken = 0
 let intentionalDisconnect = false
 const typecheckingExtraPaths = ['/workspace/lib']
 let typecheckingAction = Promise.resolve()
+let diagnosticsFilters = normalizeDiagnosticsFilters()
 
 const isBusyState = () => deviceState === 'busy-initial' || deviceState === 'busy-running'
 const portReady = () => !!port && deviceState === 'ready'
@@ -194,6 +200,40 @@ function updateTypecheckingUI(snapshot = typechecking.snapshot()) {
         snapshot,
         getSetting('typecheck-enabled'),
     )
+    updateDiagnosticsPanel()
+}
+
+function openEditorDiagnostics() {
+    const editors = []
+    for (const editorElement of QSA('.editor-tab-pane .editor')) {
+        const view = getEditorFromElement(editorElement)
+        const path = getTabFileName(editorElement)
+        if (view && path) {
+            editors.push({ path, diagnostics: getEditorDiagnostics(view) })
+        }
+    }
+    return editors
+}
+
+function updateDiagnosticsPanel() {
+    const presentation = diagnosticsPanelPresentation(openEditorDiagnostics(), diagnosticsFilters)
+    renderDiagnosticsPanel({
+        badgeEl: QID('diagnostics-badge'),
+        fileSelectEl: QID('diagnostics-file'),
+        listEl: QID('diagnostics-list'),
+    }, presentation, diagnosticsFilters)
+}
+
+function showBottomPanel(target, focus = false) {
+    QS(`#terminal-tabs .tab[data-target="${target}"]`)?.click()
+    if (target === 'xterm' && focus) { term?.focus() }
+}
+
+function jumpToDiagnostic(path, line, character) {
+    if (!displayOpenFile(path)) { return }
+    const editorElement = getTabEditorElement(path)
+    const view = editorElement && getEditorFromElement(editorElement)
+    if (view) { goToDocumentPosition(view, line, character) }
 }
 
 async function updateTypecheckingBoardOptions() {
@@ -1737,6 +1777,7 @@ async function _loadContent(fn, content, editorElement, { external=null } = {}) 
 
         const scheduleSync = makeCoalesced(1000)
         addUpdateHandler(editor, (update) => {
+            updateDiagnosticsPanel()
             if (!update.docChanged) return
             // The tab knows the current name; this one goes stale on a move
             const key = getTabFileName(editorElement) || tabFn
@@ -1883,6 +1924,7 @@ export async function reboot(mode = 'hard') {
 }
 
 export async function runCurrentFile() {
+    showBottomPanel('xterm', true)
     if (!port || deviceState === 'reconnecting') return;
 
     if (isInRunMode || isBusyState()) {
@@ -2474,6 +2516,21 @@ function showOfflineReadyToast(version) {
 
     setupTabs(QID('side-menu'))
     setupTabs(QID('terminal-container'))
+    QID('diagnostics-file').addEventListener('change', event => {
+        diagnosticsFilters.file = event.target.value
+        updateDiagnosticsPanel()
+    })
+    QID('diagnostics-severities').addEventListener('change', () => {
+        diagnosticsFilters.severities = new Set(
+            QSA('#diagnostics-severities input:checked').map(input => input.value),
+        )
+        updateDiagnosticsPanel()
+    })
+    QID('diagnostics-list').addEventListener('click', event => {
+        const item = event.target.closest('.diagnostic-item')
+        if (!item) { return }
+        jumpToDiagnostic(item.dataset.path, Number(item.dataset.line), Number(item.dataset.character))
+    })
 
     toastr.options.preventDuplicates = true;
 
@@ -2631,9 +2688,11 @@ function showOfflineReadyToast(version) {
         /* Closing already asked about discarding unsaved changes, so the backup
            has to go with them */
         fsCache.closeView(event.detail.fn)
+        updateDiagnosticsPanel()
     })
     document.addEventListener("fileRenamed", event => {
         typechecking.renamePath(event.detail.old, event.detail.new)
+        updateDiagnosticsPanel()
     })
     document.addEventListener("fileRemoved", event => {
         typechecking.removePath(event.detail.path)

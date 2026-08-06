@@ -13,11 +13,13 @@ def test_typechecking_status_can_disable_and_restore_pyright(page, viperide_serv
     status = page.locator("#typechecking-status")
     enabled = page.locator("#typecheck-enabled")
     editor_area = page.locator("#main-editor")
+    typecheck_tab = page.locator('[data-target="diagnostics"]')
     expect(status).to_have_text(re.compile(r"Type check: Ready"), timeout=90_000)
     expect(status).to_have_attribute("data-state", "ready")
     expect(status).to_have_attribute("aria-pressed", "true")
     expect(editor_area).to_be_visible()
 
+    typecheck_tab.click()
     status.click()
 
     expect(status).to_have_text("Type check: Off")
