@@ -19,7 +19,7 @@ export function stubTargetForDevice(devInfo = {}) {
   // CircuitPython uses different stub packages even when sys.platform names the same MCU port.
   if (identity.includes('circuitpython')) { return 'circuitpython' }
   if (MICROPYTHON_STUB_TARGETS.has(platform)) { return platform }
-  return 'stdlib'
+  return undefined
 }
 
 // Owns the application-wide LSP lifecycle and state independently of editor and device UI.
@@ -332,8 +332,15 @@ export class TypecheckingService {
   }
 
   async selectDevice(devInfo) {
-    if (this.initializing) { await this.initializing }
     const boardId = stubTargetForDevice(devInfo)
+    return boardId ? this.selectStubBundle(boardId) : false
+  }
+
+  async selectStubBundle(boardId) {
+    if (this.initializing) { await this.initializing }
+    if (typeof boardId !== 'string' || !boardId.trim()) {
+      throw new TypeError('Type-checking stub bundle ID is required')
+    }
     if (this.selectedStubBundle?.id === boardId) { return false }
     if (this.switching) { return this.switching }
     if (this.status !== 'ready' || !this.switchBoard || !this.prepareRuntime) {
@@ -484,6 +491,7 @@ export class TypecheckingService {
       client: this.client,
       transport: this.transport,
       selectedStubBundle: this.selectedStubBundle,
+      typeCheckingMode: this.clientConfig?.typeCheckingMode || 'standard',
       documentVersions: new Map(this.documentVersions),
       diagnosticStatus: new Map(this.diagnosticStatus),
       workspaceFiles: new Map(this.workspaceFiles),

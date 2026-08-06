@@ -27,6 +27,7 @@ function diagnosticCounts(diagnosticStatus) {
 export function typecheckingStatusPresentation(snapshot, enabled) {
     const state = enabled ? snapshot.status : 'disabled'
     const board = snapshot.selectedStubBundle?.id || snapshot.selectedStubBundle || 'standard'
+    const mode = snapshot.typeCheckingMode || 'standard'
     const counts = diagnosticCounts(snapshot.diagnosticStatus)
 
     switch (state) {
@@ -50,7 +51,7 @@ export function typecheckingStatusPresentation(snapshot, enabled) {
         return {
             state,
             label: `Type check: ${counts.errors ? `${counts.errors} error${counts.errors === 1 ? '' : 's'}` : 'Ready'}`,
-            title: `Pyright is ready with ${board} stubs (${summary}). Click to disable.`,
+            title: `Pyright is ready in ${mode} mode with ${board} stubs (${summary}). Click to disable.`,
             busy: false,
         }
     }

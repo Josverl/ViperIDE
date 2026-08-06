@@ -51,10 +51,10 @@ describe('TypecheckingService', () => {
         assert.strictEqual(stubTargetForDevice({ platform: 'stm32' }), 'stm32')
         assert.strictEqual(stubTargetForDevice({ platform: 'samd' }), 'samd')
         assert.strictEqual(stubTargetForDevice({ platform: 'webassembly' }), 'webassembly')
-        assert.strictEqual(stubTargetForDevice({
+        assert.isUndefined(stubTargetForDevice({
             platform: 'linux',
             machine: 'misleading ESP32 description',
-        }), 'stdlib')
+        }))
     })
 
     it('detects CircuitPython but does not guess MicroPython ports from descriptive metadata', () => {
@@ -62,10 +62,10 @@ describe('TypecheckingService', () => {
             platform: 'rp2',
             version: 'CircuitPython 10.2.0',
         }), 'circuitpython')
-        assert.strictEqual(stubTargetForDevice({ machine: 'ESP32 module' }), 'stdlib')
-        assert.strictEqual(stubTargetForDevice({ machine: 'Raspberry Pi Pico W with RP2040' }), 'stdlib')
-        assert.strictEqual(stubTargetForDevice({ sysname: 'pyboard', mpy_arch: 'armv7emsp' }), 'stdlib')
-        assert.strictEqual(stubTargetForDevice({ machine: 'webassembly' }), 'stdlib')
+        assert.isUndefined(stubTargetForDevice({ machine: 'ESP32 module' }))
+        assert.isUndefined(stubTargetForDevice({ machine: 'Raspberry Pi Pico W with RP2040' }))
+        assert.isUndefined(stubTargetForDevice({ sysname: 'pyboard', mpy_arch: 'armv7emsp' }))
+        assert.isUndefined(stubTargetForDevice({ machine: 'webassembly' }))
     })
 
     it('initializes one client and reports owned state', async () => {
@@ -505,6 +505,7 @@ describe('TypecheckingService', () => {
                 return true
             },
         })
+
         await service.initialize({ boardId: 'stdlib' })
         await service.bindEditor(editor('draft'), 'main.py')
         service.hydrateWorkspace({ 'foo.py': 'def foofoo(x: str): return 2 * x' })
@@ -520,6 +521,31 @@ describe('TypecheckingService', () => {
         ])
         assert.strictEqual(service.documentVersions.get('file:///workspace/main.py'), 1)
         assert.deepEqual(configured.at(-1), ['lsp:file:///workspace/main.py'])
+    })
+
+    it('switches directly to a manually selected stub bundle', async () => {
+        const first = resources()
+        const second = resources()
+        const service = new TypecheckingService({
+            createLSPClient: async () => first,
+            prepareRuntime: async config => ({
+                workerUrl: 'blob:worker',
+                stubBundle: { id: config.boardId || 'stdlib' },
+            }),
+            switchBoard: async () => second,
+            createLSPPlugin: () => ['lsp-extension'],
+            configureEditor: () => true,
+        })
+        await service.initialize({ boardId: 'stdlib', typeCheckingMode: 'strict' })
+
+        assert.isTrue(await service.selectStubBundle('rp2'))
+        assert.strictEqual(service.snapshot().selectedStubBundle.id, 'rp2')
+        assert.strictEqual(service.snapshot().typeCheckingMode, 'strict')
+        assert.isFalse(await service.selectStubBundle('rp2'))
+        await service.selectStubBundle('').then(
+            () => assert.fail('empty stub bundle should fail'),
+            error => assert.include(error.message, 'stub bundle ID is required'),
+        )
     })
 
     it('waits for a device switch before binding a newly opened editor', async () => {

@@ -29,3 +29,5 @@ export const typechecking = new TypecheckingService({
     typecheckingAssets.releaseWorkerBlobUrl(url)
   },
 })
+
+export const loadTypecheckingStubManifest = () => typecheckingAssets.loadManifest()

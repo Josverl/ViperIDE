@@ -15,6 +15,7 @@ function snapshot(status, options = {}) {
         status,
         error: options.error || null,
         selectedStubBundle: options.stubBundle || null,
+        typeCheckingMode: options.typeCheckingMode || 'standard',
         diagnosticStatus: options.diagnosticStatus || new Map(),
     }
 }
@@ -44,6 +45,7 @@ describe('type-checking status UI', () => {
         assert.deepInclude(typecheckingStatusPresentation(
             snapshot('ready', {
                 stubBundle: { id: 'esp32' },
+                typeCheckingMode: 'strict',
                 diagnosticStatus: duplicateDiagnostics,
             }),
             true,
@@ -52,6 +54,10 @@ describe('type-checking status UI', () => {
             label: 'Type check: 1 error',
             busy: false,
         })
+        assert.include(typecheckingStatusPresentation(
+            snapshot('ready', { stubBundle: { id: 'esp32' }, typeCheckingMode: 'strict' }),
+            true,
+        ).title, 'strict mode with esp32 stubs')
         assert.deepInclude(typecheckingStatusPresentation(snapshot('starting'), true), {
             state: 'starting',
             label: 'Type check: Starting',

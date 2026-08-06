@@ -34,6 +34,12 @@ import translations from '../build/translations.json'
 import { parseStackTrace, validatePython, disassembleMPY, minifyPython, prettifyPython, compilePython } from './python_utils.js'
 import { createBrowserVM, SYSTEM_DIRS } from './emulator.js'
 import { getSetting, onSettingChange, updateSetting } from './settings.js'
+import {
+    normalizeTypecheckingBoard,
+    resolveTypecheckingBoard,
+    typecheckingBoardOptions,
+    typecheckingRuntimeConfig,
+} from './typechecking_settings.js'
 import { renderMarkdown } from './markdown.js'
 
 import { UAParser } from 'ua-parser-js'
@@ -49,7 +55,7 @@ import * as fsCache from './fs_cache.js'
 import { createZipSync } from './zip.js'
 
 import { initControlClient } from './control_client.js'
-import { typechecking } from './typechecking.js'
+import { loadTypecheckingStubManifest, typechecking } from './typechecking.js'
 import { renderTypecheckingStatus } from './typechecking_status.js'
 import { readDevicePythonWorkspace } from './typechecking_workspace.js'
 
@@ -122,7 +128,7 @@ let reconnectToken = 0
 /* True while the user is letting the device go, so the disconnect callback that
    the teardown itself triggers is not mistaken for the device dropping out */
 let intentionalDisconnect = false
-const typecheckingConfig = { extraPaths: ['/workspace/lib'] }
+const typecheckingExtraPaths = ['/workspace/lib']
 let typecheckingAction = Promise.resolve()
 
 const isBusyState = () => deviceState === 'busy-initial' || deviceState === 'busy-running'
@@ -184,10 +190,21 @@ function setDeviceState(newState) {
 function updateTypecheckingUI(snapshot = typechecking.snapshot()) {
     renderTypecheckingStatus(
         QID('typechecking-status'),
-        QID('typechecking-enabled'),
+        QID('typecheck-enabled'),
         snapshot,
-        getSetting('typechecking-enabled'),
+        getSetting('typecheck-enabled'),
     )
+}
+
+async function updateTypecheckingBoardOptions() {
+    const select = QID('typecheck-stubs')
+    const manifest = await loadTypecheckingStubManifest()
+    const selected = normalizeTypecheckingBoard(getSetting('typecheck-stubs'))
+    select.replaceChildren(new Option('Automatic', 'auto'))
+    for (const board of typecheckingBoardOptions(manifest)) {
+        select.add(new Option(board.label, board.id))
+    }
+    select.value = selected
 }
 
 async function applyTypecheckingSetting(enabled) {
@@ -196,10 +213,16 @@ async function applyTypecheckingSetting(enabled) {
         return
     }
 
-    await typechecking.initialize(typecheckingConfig)
-    if (devInfo) {
-        await typechecking.selectDevice(devInfo)
-    }
+    await typechecking.initialize(currentTypecheckingConfig())
+}
+
+function currentTypecheckingConfig() {
+    return typecheckingRuntimeConfig({
+        mode: getSetting('typecheck-mode'),
+        board: getSetting('typecheck-stubs'),
+        devInfo,
+        extraPaths: typecheckingExtraPaths,
+    })
 }
 
 function queueTypecheckingSetting(enabled) {
@@ -212,16 +235,32 @@ function queueTypecheckingSetting(enabled) {
 function queueTypecheckingDeviceSelection() {
     typecheckingAction = typecheckingAction.
         then(() => {
-            if (!getSetting('typechecking-enabled') || !devInfo) { return }
-            return typechecking.selectDevice(devInfo)
+            if (!getSetting('typecheck-enabled')) { return }
+            const boardId = resolveTypecheckingBoard(getSetting('typecheck-stubs'), devInfo)
+            if (!boardId) { return }
+            return typechecking.selectStubBundle(boardId)
         }).
         catch(err => report('Unable to select type-checking stubs', err))
     return typecheckingAction
 }
 
+function queueTypecheckingReconfiguration() {
+    typecheckingAction = typecheckingAction.
+        then(async () => {
+            if (!getSetting('typecheck-enabled')) { return }
+            const status = typechecking.snapshot().status
+            if (status !== 'idle' && status !== 'disabled') {
+                typechecking.disable()
+            }
+            await typechecking.initialize(currentTypecheckingConfig())
+        }).
+        catch(err => report('Unable to apply type-checking settings', err))
+    return typecheckingAction
+}
+
 export function toggleTypechecking() {
-    const current = getSetting('typechecking-enabled')
-    updateSetting('typechecking-enabled', !current)
+    const current = getSetting('typecheck-enabled')
+    updateSetting('typecheck-enabled', !current)
 }
 
 function setRunMode(on) {
@@ -2272,6 +2311,9 @@ export function applyTranslation() {
         QS('label[for=render-markdown]').innerText = T('settings.render-markdown')
         QS('label[for=refresh-after-run]').innerText = T('settings.refresh-after-run')
         QS('label[for=auto-soft-reset]').innerText = T('settings.auto-soft-reset')
+        QS('label[for=typecheck-enabled]').innerText = T('settings.typecheck-enabled')
+        QS('label[for=typecheck-mode]').innerText = T('settings.typecheck-mode')
+        QS('label[for=typecheck-stubs]').innerText = T('settings.typecheck-stubs')
         QS('label[for=use-natural-sort]').innerText = T('settings.use-natural-sort')
 
         QS('label[for=lang]').innerText = T('settings.lang')
@@ -2421,7 +2463,10 @@ function showOfflineReadyToast(version) {
     })
 
     typechecking.onStatusChange(updateTypecheckingUI)
-    onSettingChange('typechecking-enabled', queueTypecheckingSetting)
+    updateTypecheckingBoardOptions().catch(err => report('Unable to load type-stub versions', err))
+    onSettingChange('typecheck-enabled', queueTypecheckingSetting)
+    onSettingChange('typecheck-mode', queueTypecheckingReconfiguration)
+    onSettingChange('typecheck-stubs', queueTypecheckingReconfiguration)
 
     initLaunchHandler()
     applyTranslation()
@@ -2610,7 +2655,7 @@ function showOfflineReadyToast(version) {
     }, 100)
 
     // Type checking is independent of device transport and remains alive across reconnects.
-    queueTypecheckingSetting(getSetting('typechecking-enabled'))
+    queueTypecheckingSetting(getSetting('typecheck-enabled'))
     window.addEventListener('pagehide', event => {
         // A bfcache page remains live and must retain its worker for restoration.
         if (!event.persisted) { typechecking.dispose() }
