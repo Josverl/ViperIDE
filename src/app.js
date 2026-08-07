@@ -1782,32 +1782,36 @@ async function _loadContent(fn, content, editorElement, { external=null } = {}) 
         }
 
         editorElement.innerHTML = '' // Clear existing content
-        editor = await createNewEditor(editorElement, fn, content, {
+        const loadedEditor = await createNewEditor(editorElement, fn, content, {
             wordWrap: getSetting('use-word-wrap'),
             devInfo,
             readOnly,
         })
+        if (editorElement.closest('.editor-tab-pane')?.classList.contains('active')) {
+            editor = loadedEditor
+            editorFn = fn
+        }
         /* The text as handed to the editor, which is not the bytes on the device
            for prettified JSON or a disassembly. Comparing against this is what
            makes an undo clear the marker again. */
         fsCache.openView(tabFn, { baseline: content, kind: 'text', readOnly })
-        document.dispatchEvent(new CustomEvent("editorLoaded", {detail: {editor: editor, fn: fn}}))
+        document.dispatchEvent(new CustomEvent("editorLoaded", {
+            detail: { editor: loadedEditor, fn },
+        }))
 
         const scheduleSync = makeCoalesced(1000)
-        addUpdateHandler(editor, (update) => {
+        addUpdateHandler(loadedEditor, (update) => {
             updateDiagnosticsPanel()
             if (!update.docChanged) return
             // The tab knows the current name; this one goes stale on a move
             const key = getTabFileName(editorElement) || tabFn
             const text = update.state.doc.toString()
             // Keep completion and hover synchronized while draft persistence remains coalesced.
-            typechecking.changeEditor(editor, text)
+            typechecking.changeEditor(loadedEditor, text)
             scheduleSync(() => {
                 setDirty(key, fsCache.setDraft(key, text))
             })
         })
-
-        editorFn = fn
     }
     autoHideSideMenu()
 }

@@ -159,7 +159,7 @@ export class TypecheckingService {
     const uri = this.uriForPath(path)
     const content = editorView.state.doc.toString()
     const workspacePath = this.workspacePath(path)
-    this.setWorkspaceFile(workspacePath, content, false)
+    this.setWorkspaceFile(workspacePath, content)
     this.editorBindings.set(editorView, { path, uri })
     if (this.status !== 'ready') {
       return uri

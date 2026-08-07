@@ -170,6 +170,8 @@ describe('TypecheckingService', () => {
     it('binds an editor with an encoded workspace URI', async () => {
         const result = resources()
         const configured = []
+        const notifications = []
+        result.client.notify = (method, params) => notifications.push({ method, params })
         let pluginOptions
         const service = new TypecheckingService({
             createLSPClient: async () => result,
@@ -193,6 +195,12 @@ describe('TypecheckingService', () => {
         assert.strictEqual(pluginOptions.diagnosticDelayMs, 300)
         assert.deepEqual(configured, [{ view, extensions: ['lsp-extension'] }])
         assert.strictEqual(service.documentVersions.get(uri), 1)
+        assert.deepEqual(notifications, [{
+            method: 'workspace/didChangeWatchedFiles',
+            params: {
+                changes: [{ uri, type: 1 }],
+            },
+        }])
     })
 
     it('registers editors before startup and binds them when initialization completes', async () => {
