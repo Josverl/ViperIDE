@@ -9,7 +9,7 @@ import pytest
 def _serves_current_build(url):
     try:
         with urllib.request.urlopen(url, timeout=1) as response:
-            return response.status == 200 and b"typechecking-status" in response.read()
+            return response.status == 200 and b"typecheck-tab" in response.read()
     except Exception:
         return False
 

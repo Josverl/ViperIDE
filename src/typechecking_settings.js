@@ -6,9 +6,11 @@
 import { stubTargetForDevice } from './typechecking_service.js'
 
 export const DEFAULT_TYPECHECKING_MODE = 'standard'
+export const DEFAULT_TYPECHECKING_SCOPE = 'workspace'
 export const AUTO_TYPECHECKING_BOARD = 'auto'
 
 const TYPECHECKING_MODES = new Set(['basic', 'standard', 'strict'])
+const TYPECHECKING_SCOPES = new Set(['openFilesOnly', 'workspace'])
 const TYPECHECKING_BOARD_LABELS = new Map([
     ['esp32', 'MP ESP32'],
     ['rp2', 'MP RP2'],
@@ -29,6 +31,10 @@ const TYPECHECKING_BOARDS = new Set([
 
 export function normalizeTypecheckingMode(value) {
     return TYPECHECKING_MODES.has(value) ? value : DEFAULT_TYPECHECKING_MODE
+}
+
+export function normalizeTypecheckingScope(value) {
+    return TYPECHECKING_SCOPES.has(value) ? value : DEFAULT_TYPECHECKING_SCOPE
 }
 
 export function normalizeTypecheckingBoard(value) {
@@ -58,10 +64,11 @@ export function typecheckingBoardOptions(manifest) {
         })
 }
 
-export function typecheckingRuntimeConfig({ mode, board, devInfo, extraPaths = [] }) {
+export function typecheckingRuntimeConfig({ mode, scope, board, devInfo, extraPaths = [] }) {
     const boardId = resolveTypecheckingBoard(board, devInfo)
     return {
         extraPaths,
+        diagnosticMode: normalizeTypecheckingScope(scope),
         typeCheckingMode: normalizeTypecheckingMode(mode),
         ...(boardId ? { boardId } : {}),
     }

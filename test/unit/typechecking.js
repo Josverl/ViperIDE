@@ -76,29 +76,6 @@ describe('TypecheckingService', () => {
             revokeObjectURL: () => assert.fail('should not revoke before disposal'),
         })
 
-        it('prepares the pinned runtime before creating the client', async () => {
-            const result = resources()
-            let receivedConfig
-            const service = new TypecheckingService({
-                prepareRuntime: async config => ({
-                    workerUrl: 'blob:worker',
-                    workerBlobUrl: 'blob:worker',
-                    boardStubs: new ArrayBuffer(1),
-                    stubBundle: { id: config.boardId },
-                }),
-                createLSPClient: async config => {
-                    receivedConfig = config
-                    return result
-                },
-            })
-
-            await service.initialize({ boardId: 'esp32', timeout: 1000 })
-
-            assert.strictEqual(receivedConfig.workerUrl, 'blob:worker')
-            assert.strictEqual(receivedConfig.timeout, 1000)
-            assert.strictEqual(service.selectedStubBundle.id, 'esp32')
-        })
-
         const [first, second] = await Promise.all([
             service.initialize({
                 workerUrl: 'blob:worker',
@@ -112,6 +89,62 @@ describe('TypecheckingService', () => {
         assert.strictEqual(first.status, 'ready')
         assert.strictEqual(second.client, result.client)
         assert.strictEqual(first.selectedStubBundle, 'esp32')
+    })
+
+    it('prepares the runtime and collects diagnostics from unopened workspace files', async () => {
+        const result = resources()
+        const subscription = {
+            destroyCalls: 0,
+            destroy() { this.destroyCalls++ },
+        }
+        result.workspaceDiagnosticsSubscription = subscription
+        let receivedConfig
+        const service = new TypecheckingService({
+            prepareRuntime: async config => ({
+                workerUrl: 'blob:worker',
+                workerBlobUrl: 'blob:worker',
+                boardStubs: new ArrayBuffer(1),
+                stubBundle: { id: config.boardId },
+            }),
+            createLSPClient: async config => {
+                receivedConfig = config
+                return result
+            },
+        })
+
+        await service.initialize({
+            boardId: 'esp32',
+            timeout: 1000,
+            diagnosticMode: 'workspace',
+        })
+        receivedConfig.onWorkspaceDiagnosticsChange([{
+            uri: 'file:///workspace/lib/unopened.py',
+            fileName: 'lib/unopened.py',
+            line: 2,
+            character: 3,
+            severity: 'error',
+            message: 'Bad type',
+            source: 'Pyright',
+        }])
+
+        assert.strictEqual(receivedConfig.workerUrl, 'blob:worker')
+        assert.strictEqual(receivedConfig.timeout, 1000)
+        assert.strictEqual(receivedConfig.diagnosticMode, 'workspace')
+        assert.strictEqual(service.selectedStubBundle.id, 'esp32')
+        assert.deepEqual(
+            service.snapshot().diagnosticStatus.get('file:///workspace/lib/unopened.py'),
+            [{
+                uri: 'file:///workspace/lib/unopened.py',
+                fileName: 'lib/unopened.py',
+                line: 2,
+                character: 3,
+                severity: 'error',
+                message: 'Bad type',
+                source: 'Pyright',
+            }],
+        )
+        service.dispose()
+        assert.strictEqual(subscription.destroyCalls, 1)
     })
 
     it('owns document versions and diagnostic status', () => {
@@ -157,7 +190,7 @@ describe('TypecheckingService', () => {
         assert.strictEqual(uri, 'file:///workspace/lib/my%20file.py')
         assert.strictEqual(pluginOptions.fileUri, uri)
         assert.strictEqual(pluginOptions.initialContent, 'print(1)')
-        assert.strictEqual(pluginOptions.diagnosticDelayMs, 750)
+        assert.strictEqual(pluginOptions.diagnosticDelayMs, 300)
         assert.deepEqual(configured, [{ view, extensions: ['lsp-extension'] }])
         assert.strictEqual(service.documentVersions.get(uri), 1)
     })
@@ -484,12 +517,14 @@ describe('TypecheckingService', () => {
 
     it('switches changed device stubs and rebinds open editors once', async () => {
         const first = resources()
+        first.workspaceDiagnosticsSubscription = { destroy() {} }
         first.transport.syncWorkspaceFile = () => {}
         const second = resources()
         second.transport.synced = []
         second.transport.syncWorkspaceFile = (path, content) =>
             second.transport.synced.push({ path, content })
         let switches = 0
+        let switchCurrent
         const configured = []
         const service = new TypecheckingService({
             createLSPClient: async () => first,
@@ -498,7 +533,11 @@ describe('TypecheckingService', () => {
                 stubBundle: { id: config.boardId || 'stdlib' },
                 boardStubs: new ArrayBuffer(1),
             }),
-            switchBoard: async () => { switches++; return second },
+            switchBoard: async current => {
+                switches++
+                switchCurrent = current
+                return second
+            },
             createLSPPlugin: (_client, _view, options) => [`lsp:${options.fileUri}`],
             configureEditor: (_view, extensions) => {
                 configured.push(extensions)
@@ -514,6 +553,10 @@ describe('TypecheckingService', () => {
         assert.isFalse(await service.selectDevice({ platform: 'esp32', machine: 'ESP32 module' }))
 
         assert.strictEqual(switches, 1)
+        assert.strictEqual(
+            switchCurrent.workspaceDiagnosticsSubscription,
+            first.workspaceDiagnosticsSubscription,
+        )
         assert.strictEqual(service.selectedStubBundle.id, 'esp32')
         assert.deepEqual(second.transport.synced, [
             { path: 'main.py', content: 'draft' },
@@ -651,6 +694,10 @@ describe('TypecheckingService', () => {
     it('closes resources that finish initializing after disposal', async () => {
         const pending = deferred()
         const result = resources()
+        result.workspaceDiagnosticsSubscription = {
+            destroyCalls: 0,
+            destroy() { this.destroyCalls++ },
+        }
         const revoked = []
         const service = new TypecheckingService({
             createLSPClient: () => pending.promise,
@@ -675,6 +722,7 @@ describe('TypecheckingService', () => {
         assert.match(caught.message, /disposed during initialization/)
         assert.strictEqual(result.client.disconnectCalls, 1)
         assert.strictEqual(result.transport.closeCalls, 1)
+        assert.strictEqual(result.workspaceDiagnosticsSubscription.destroyCalls, 1)
         assert.deepEqual(revoked, ['blob:worker'])
     })
 })

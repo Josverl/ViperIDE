@@ -3,7 +3,9 @@
  * SPDX-License-Identifier: MIT
  */
 
-const DIAGNOSTIC_DELAY_MS = 750
+// This delay starts after Pyright worker analysis; 300 ms keeps its results close to
+// Ruff, whose CodeMirror debounce starts immediately when the document changes.
+const DIAGNOSTIC_DELAY_MS = 300
 const MICROPYTHON_STUB_TARGETS = new Set(['esp32', 'rp2', 'stm32', 'samd', 'webassembly'])
 
 export function stubTargetForDevice(devInfo = {}) {
@@ -47,6 +49,7 @@ export class TypecheckingService {
     this.revokeObjectURL = revokeObjectURL
     this.client = null
     this.transport = null
+    this.workspaceDiagnosticsSubscription = null
     this.workerBlobUrl = null
     this.selectedStubBundle = null
     this.documentVersions = new Map()
@@ -85,12 +88,16 @@ export class TypecheckingService {
       }
       this.workerBlobUrl = runtimeConfig.workerBlobUrl || null
       this.selectedStubBundle = runtimeConfig.stubBundle || null
-      this.clientConfig = { ...config, ...runtimeConfig }
+      this.clientConfig = {
+        ...config,
+        ...runtimeConfig,
+        onWorkspaceDiagnosticsChange: diagnostics => this.setWorkspaceDiagnosticStatus(diagnostics),
+      }
       if (generation !== this.generation || this.status === 'disposed') {
         this.releaseWorkerBlob()
         throw new Error('TypecheckingService was disposed during initialization')
       }
-      return this.createLSPClient({ ...config, ...runtimeConfig })
+      return this.createLSPClient(this.clientConfig)
     }).then(result => {
       if (generation !== this.generation || this.status === 'disposed') {
         this.closeResult(result)
@@ -98,6 +105,7 @@ export class TypecheckingService {
       }
       this.client = result.client
       this.transport = result.transport
+      this.workspaceDiagnosticsSubscription = result.workspaceDiagnosticsSubscription || null
       this.rebindEditors()
       this.setStatus('ready', null)
       return this.snapshot()
@@ -133,7 +141,6 @@ export class TypecheckingService {
       languageId: 'python',
       initialContent: content,
       diagnosticDelayMs: DIAGNOSTIC_DELAY_MS,
-      onDiagnosticsChange: diagnostics => this.setDiagnosticStatus(uri, diagnostics),
     })
   }
 
@@ -352,7 +359,11 @@ export class TypecheckingService {
     this.switching = this.prepareRuntime({ ...this.clientConfig, boardId }).
       then(async runtimeConfig => ({
         result: await this.switchBoard(
-          { client: this.client, transport: this.transport },
+          {
+            client: this.client,
+            transport: this.transport,
+            workspaceDiagnosticsSubscription: this.workspaceDiagnosticsSubscription,
+          },
           { ...this.clientConfig, ...runtimeConfig },
         ),
         runtimeConfig,
@@ -360,6 +371,7 @@ export class TypecheckingService {
       then(({ result, runtimeConfig }) => {
         this.client = result.client
         this.transport = result.transport
+        this.workspaceDiagnosticsSubscription = result.workspaceDiagnosticsSubscription || null
         this.selectedStubBundle = runtimeConfig.stubBundle
         this.clientConfig = { ...this.clientConfig, ...runtimeConfig, boardId }
         this.rebindEditors()
@@ -483,6 +495,21 @@ export class TypecheckingService {
     this.emitStatus()
   }
 
+  setWorkspaceDiagnosticStatus(diagnostics) {
+    this.diagnosticStatus.clear()
+    for (const diagnostic of diagnostics) {
+      const uri = diagnostic.uri
+      if (!this.diagnosticStatus.has(uri)) {
+        this.diagnosticStatus.set(uri, [])
+      }
+      this.diagnosticStatus.get(uri).push({
+        ...diagnostic,
+        source: diagnostic.source || 'Pyright',
+      })
+    }
+    this.emitStatus()
+  }
+
   snapshot() {
     // Return new maps so status consumers cannot mutate service-owned state.
     return {
@@ -492,6 +519,7 @@ export class TypecheckingService {
       transport: this.transport,
       selectedStubBundle: this.selectedStubBundle,
       typeCheckingMode: this.clientConfig?.typeCheckingMode || 'standard',
+      diagnosticMode: this.clientConfig?.diagnosticMode || 'openFilesOnly',
       documentVersions: new Map(this.documentVersions),
       diagnosticStatus: new Map(this.diagnosticStatus),
       workspaceFiles: new Map(this.workspaceFiles),
@@ -513,7 +541,15 @@ export class TypecheckingService {
     this.statusListeners.clear()
   }
 
-  closeResult({ client, transport } = {}) {
+  closeResult({
+    client,
+    transport,
+    workspaceDiagnosticsSubscription = this.workspaceDiagnosticsSubscription,
+  } = {}) {
+    workspaceDiagnosticsSubscription?.destroy()
+    if (workspaceDiagnosticsSubscription === this.workspaceDiagnosticsSubscription) {
+      this.workspaceDiagnosticsSubscription = null
+    }
     client?.disconnect()
     transport?.close()
   }

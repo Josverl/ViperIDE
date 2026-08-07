@@ -56,7 +56,7 @@ import { createZipSync } from './zip.js'
 
 import { initControlClient } from './control_client.js'
 import { loadTypecheckingStubManifest, typechecking } from './typechecking.js'
-import { renderTypecheckingStatus } from './typechecking_status.js'
+import { collectDiagnosticEntries, renderTypecheckingStatus } from './typechecking_status.js'
 import { readDevicePythonWorkspace } from './typechecking_workspace.js'
 import {
     diagnosticsPanelPresentation,
@@ -195,7 +195,7 @@ function setDeviceState(newState) {
 
 function updateTypecheckingUI(snapshot = typechecking.snapshot()) {
     renderTypecheckingStatus(
-        QID('typechecking-status'),
+        QID('typecheck-tab'),
         QID('typecheck-enabled'),
         snapshot,
         getSetting('typecheck-enabled'),
@@ -204,15 +204,25 @@ function updateTypecheckingUI(snapshot = typechecking.snapshot()) {
 }
 
 function openEditorDiagnostics() {
-    const editors = []
+    const editors = new Map()
     for (const editorElement of QSA('.editor-tab-pane .editor')) {
         const view = getEditorFromElement(editorElement)
         const path = getTabFileName(editorElement)
         if (view && path) {
-            editors.push({ path, diagnostics: getEditorDiagnostics(view) })
+            editors.set(path, { path, diagnostics: getEditorDiagnostics(view) })
         }
     }
-    return editors
+    for (const diagnostic of collectDiagnosticEntries(typechecking.snapshot().diagnosticStatus)) {
+        const encodedPath = diagnostic.fileName ||
+            diagnostic.uri?.replace(/^file:\/\/\/workspace\//, '')
+        if (!encodedPath) { continue }
+        const path = '/' + encodedPath.split('/').map(decodeURIComponent).join('/')
+        if (!editors.has(path)) {
+            editors.set(path, { path, diagnostics: [] })
+        }
+        editors.get(path).diagnostics.push(diagnostic)
+    }
+    return [...editors.values()]
 }
 
 function updateDiagnosticsPanel() {
@@ -229,8 +239,15 @@ function showBottomPanel(target, focus = false) {
     if (target === 'xterm' && focus) { term?.focus() }
 }
 
-function jumpToDiagnostic(path, line, character) {
-    if (!displayOpenFile(path)) { return }
+async function jumpToDiagnostic(path, line, character) {
+    if (!displayOpenFile(path)) {
+        if (!portReady()) {
+            throw new Error(`Reconnect the device to open: ${path}`)
+        }
+        // Read through the normal device path so an old type-check snapshot can
+        // never create an editable tab that overwrites newer device content.
+        await fileClick(path)
+    }
     const editorElement = getTabEditorElement(path)
     const view = editorElement && getEditorFromElement(editorElement)
     if (view) { goToDocumentPosition(view, line, character) }
@@ -259,6 +276,7 @@ async function applyTypecheckingSetting(enabled) {
 function currentTypecheckingConfig() {
     return typecheckingRuntimeConfig({
         mode: getSetting('typecheck-mode'),
+        scope: getSetting('typecheck-scope'),
         board: getSetting('typecheck-stubs'),
         devInfo,
         extraPaths: typecheckingExtraPaths,
@@ -2355,6 +2373,7 @@ export function applyTranslation() {
         QS('label[for=auto-soft-reset]').innerText = T('settings.auto-soft-reset')
         QS('label[for=typecheck-enabled]').innerText = T('settings.typecheck-enabled')
         QS('label[for=typecheck-mode]').innerText = T('settings.typecheck-mode')
+        QS('label[for=typecheck-scope]').innerText = T('settings.typecheck-scope')
         QS('label[for=typecheck-stubs]').innerText = T('settings.typecheck-stubs')
         QS('label[for=use-natural-sort]').innerText = T('settings.use-natural-sort')
 
@@ -2508,6 +2527,7 @@ function showOfflineReadyToast(version) {
     updateTypecheckingBoardOptions().catch(err => report('Unable to load type-stub versions', err))
     onSettingChange('typecheck-enabled', queueTypecheckingSetting)
     onSettingChange('typecheck-mode', queueTypecheckingReconfiguration)
+    onSettingChange('typecheck-scope', queueTypecheckingReconfiguration)
     onSettingChange('typecheck-stubs', queueTypecheckingReconfiguration)
 
     initLaunchHandler()
@@ -2529,7 +2549,11 @@ function showOfflineReadyToast(version) {
     QID('diagnostics-list').addEventListener('click', event => {
         const item = event.target.closest('.diagnostic-item')
         if (!item) { return }
-        jumpToDiagnostic(item.dataset.path, Number(item.dataset.line), Number(item.dataset.character))
+        jumpToDiagnostic(
+            item.dataset.path,
+            Number(item.dataset.line),
+            Number(item.dataset.character),
+        ).catch(err => report('Unable to open diagnostic location', err))
     })
 
     toastr.options.preventDuplicates = true;

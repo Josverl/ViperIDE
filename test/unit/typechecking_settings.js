@@ -8,6 +8,7 @@ import { assert } from 'chai'
 import {
     normalizeTypecheckingBoard,
     normalizeTypecheckingMode,
+    normalizeTypecheckingScope,
     resolveTypecheckingBoard,
     simpleStubVersion,
     typecheckingBoardOptions,
@@ -19,6 +20,9 @@ describe('type-checking settings', () => {
         assert.strictEqual(normalizeTypecheckingMode('strict'), 'strict')
         assert.strictEqual(normalizeTypecheckingMode(undefined), 'standard')
         assert.strictEqual(normalizeTypecheckingMode('invalid'), 'standard')
+        assert.strictEqual(normalizeTypecheckingScope('openFilesOnly'), 'openFilesOnly')
+        assert.strictEqual(normalizeTypecheckingScope('workspace'), 'workspace')
+        assert.strictEqual(normalizeTypecheckingScope('invalid'), 'workspace')
         assert.strictEqual(normalizeTypecheckingBoard('rp2'), 'rp2')
         assert.strictEqual(normalizeTypecheckingBoard('invalid'), 'auto')
     })
@@ -52,11 +56,13 @@ describe('type-checking settings', () => {
     it('builds the worker configuration from persisted settings', () => {
         assert.deepEqual(typecheckingRuntimeConfig({
             mode: 'strict',
+            scope: 'openFilesOnly',
             board: 'rp2',
             devInfo: { platform: 'esp32' },
             extraPaths: ['/workspace/lib'],
         }), {
             typeCheckingMode: 'strict',
+            diagnosticMode: 'openFilesOnly',
             boardId: 'rp2',
             extraPaths: ['/workspace/lib'],
         })

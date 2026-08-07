@@ -78,7 +78,7 @@ export function typecheckingStatusPresentation(snapshot, enabled) {
         return {
             state,
             label: `Type check: ${counts.errors ? `${counts.errors} error${counts.errors === 1 ? '' : 's'}` : 'Ready'}`,
-            title: `Pyright is ready in ${mode} mode with ${board} stubs (${summary}).${detail} Click to disable.`,
+            title: `Pyright is ready in ${mode} mode with ${board} stubs (${summary}).${detail}`,
             busy: false,
         }
     }
@@ -87,7 +87,7 @@ export function typecheckingStatusPresentation(snapshot, enabled) {
             state,
             label: 'Type check: Error',
             title: `Pyright failed: ${snapshot.error?.message || snapshot.error || 'Unknown error'}. ` +
-                'Click to disable; enable it again to retry.',
+                'Disable and enable type checking in Settings to retry.',
             busy: false,
         }
     case 'disposed':
@@ -101,20 +101,18 @@ export function typecheckingStatusPresentation(snapshot, enabled) {
         return {
             state: 'disabled',
             label: 'Type check: Off',
-            title: 'Pyright is disabled. Click to enable.',
+            title: 'Pyright is disabled in Settings.',
             busy: false,
         }
     }
 }
 
-export function renderTypecheckingStatus(button, checkbox, snapshot, enabled) {
+export function renderTypecheckingStatus(statusElement, checkbox, snapshot, enabled) {
     const presentation = typecheckingStatusPresentation(snapshot, enabled)
-    button.dataset.state = presentation.state
-    button.textContent = presentation.label
-    button.title = presentation.title
-    button.disabled = presentation.busy
-    button.setAttribute('aria-pressed', String(enabled))
-    button.setAttribute('aria-label', presentation.title)
+    statusElement.dataset.state = presentation.state
+    statusElement.title = presentation.title
+    statusElement.setAttribute('aria-label', presentation.title)
+    statusElement.setAttribute('aria-busy', String(presentation.busy))
     checkbox.disabled = presentation.busy
     return presentation
 }

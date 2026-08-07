@@ -75,22 +75,20 @@ describe('type-checking status UI', () => {
     })
 
     it('renders accessible state and locks controls during transitions', () => {
-        const button = control()
+        const statusElement = control()
         const checkbox = control()
 
         const rendered = renderTypecheckingStatus(
-            button,
+            statusElement,
             checkbox,
             snapshot('switching'),
             true,
         )
 
         assert.strictEqual(rendered.state, 'switching')
-        assert.strictEqual(button.dataset.state, 'switching')
-        assert.strictEqual(button.textContent, 'Type check: Switching')
-        assert.strictEqual(button.attributes['aria-pressed'], 'true')
-        assert.include(button.attributes['aria-label'], 'connected device')
-        assert.isTrue(button.disabled)
+        assert.strictEqual(statusElement.dataset.state, 'switching')
+        assert.strictEqual(statusElement.attributes['aria-busy'], 'true')
+        assert.include(statusElement.attributes['aria-label'], 'connected device')
         assert.isTrue(checkbox.disabled)
     })
 })

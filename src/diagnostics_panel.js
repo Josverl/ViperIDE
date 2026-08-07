@@ -84,7 +84,7 @@ export function diagnosticsPanelPresentation(openEditors, filters) {
         counts,
         emptyMessage: entries.length
             ? 'No diagnostics match the current filters.'
-            : 'No problems detected in open files.',
+            : 'No problems detected.',
     }
 }
 
@@ -104,9 +104,10 @@ export function renderDiagnosticsPanel(elements, presentation, filters) {
     const normalized = normalizeDiagnosticsFilters(filters)
     const { counts, files, filtered, emptyMessage } = presentation
     const total = counts.error + counts.warning + counts.info
+    const severity = counts.error ? 'error' : (counts.warning ? 'warning' : (counts.info ? 'info' : ''))
 
     badgeEl.textContent = total ? String(total) : ''
-    badgeEl.dataset.severity = counts.error ? 'error' : (counts.warning ? 'warning' : (counts.info ? 'info' : ''))
+    badgeEl.dataset.severity = severity
     badgeEl.title = `${counts.error} errors, ${counts.warning} warnings, ${counts.info} info`
 
     fileSelectEl.replaceChildren(new Option('All files', ''))

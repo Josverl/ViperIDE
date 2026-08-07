@@ -37,40 +37,6 @@ body.loaded {
     user-select: none;
 }
 
-#typechecking-status {
-    font-size: 0.8rem;
-    white-space: nowrap;
-}
-
-#typechecking-status::before {
-    content: "";
-    display: inline-block;
-    width: 0.55em;
-    height: 0.55em;
-    margin-right: 0.4em;
-    border-radius: 50%;
-    background: #888;
-    vertical-align: 0.08em;
-}
-
-#typechecking-status[data-state="ready"]::before {
-    background: #5bcc5b;
-}
-
-#typechecking-status[data-state="starting"]::before,
-#typechecking-status[data-state="switching"]::before {
-    background: var(--accent-color);
-}
-
-#typechecking-status[data-state="error"]::before {
-    background: #ff7272;
-}
-
-#typechecking-status[data-state="disabled"]::before,
-#typechecking-status[data-state="disposed"]::before {
-    background: #888;
-}
-
 #diagnostics-badge {
     display: inline-block;
     min-width: 1.2em;
@@ -87,11 +53,18 @@ body.loaded {
 }
 
 #diagnostics-badge[data-severity="error"] {
-    background: #b33;
+    background: #f87;
+    color: #111;
 }
 
 #diagnostics-badge[data-severity="warning"] {
-    background: #a76e00;
+    background: #fe8;
+    color: #111;
+}
+
+#diagnostics-badge[data-severity="info"] {
+    background: #aaf;
+    color: #111;
 }
 
 #container {
@@ -235,7 +208,8 @@ body.loaded {
 
 #diagnostics {
     height: 0;
-    overflow: auto;
+    overflow-x: auto;
+    overflow-y: auto;
     padding: 0;
     background: var(--bg-color-edit);
 }
@@ -246,21 +220,28 @@ body.loaded {
     z-index: 1;
     display: flex;
     align-items: center;
-    gap: 0.7em;
-    padding: 0.45em 0.7em;
+    gap: 0.5em;
+    padding: 0.25em 0.55em;
     background: var(--bg-color);
     border-bottom: 1px solid #ffffff20;
+    font-size: 0.8rem;
 }
 
 #diagnostics-controls select {
     max-width: 18em;
+    font-size: inherit;
 }
 
 #diagnostics-severities {
     display: flex;
-    gap: 0.6em;
+    gap: 0.45em;
     padding: 0;
     border: 0;
+}
+
+#diagnostics-severities input {
+    width: 0.9em;
+    height: 0.9em;
 }
 
 #diagnostics-severities legend {
@@ -274,12 +255,17 @@ body.loaded {
 #diagnostics-list {
     display: flex;
     flex-direction: column;
+    min-width: 0;
+    width: 100%;
 }
 
 .diagnostic-item {
     display: grid;
-    grid-template-columns: 5.5em minmax(10em, 18em) 1fr auto;
+    grid-template-columns: 4.6em 180px minmax(0, 1fr) minmax(0, 18em);
     gap: 0.7em;
+    box-sizing: border-box;
+    min-width: 0;
+    max-width: 100%;
     width: 100%;
     padding: 0.45em 0.7em;
     border-bottom: 1px solid #ffffff12;
@@ -294,6 +280,7 @@ body.loaded {
 
 .diagnostic-severity {
     text-transform: capitalize;
+    white-space: nowrap;
 }
 
 .diagnostic-item[data-severity="error"] .diagnostic-severity {
@@ -309,8 +296,20 @@ body.loaded {
     color: #aaa;
 }
 
+.diagnostic-location,
+.diagnostic-message,
+.diagnostic-source {
+    min-width: 0;
+}
+
+.diagnostic-location,
 .diagnostic-message {
     overflow-wrap: anywhere;
+}
+
+.diagnostic-source {
+    overflow-wrap: anywhere;
+    justify-self: right;
 }
 
 .diagnostics-empty {

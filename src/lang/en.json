@@ -40,6 +40,7 @@
             "auto-soft-reset": "Soft Reset before run",
             "typecheck-enabled": "Enable type checking",
             "typecheck-mode": "Type-check mode",
+            "typecheck-scope": "Type-check files",
             "typecheck-stubs": "Type stubs",
             "use-natural-sort": "Natural sorting",
             "lang": "Language",

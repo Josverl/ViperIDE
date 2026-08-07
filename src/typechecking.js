@@ -10,7 +10,7 @@ import {
   notifyDocumentClose,
   switchBoard,
 } from
-  'https://cdn.jsdelivr.net/gh/Josverl/stubs_playground@lsp-client-v0.2.6/packages/lsp-client/src/index.js'
+  'https://cdn.jsdelivr.net/gh/Josverl/stubs_playground@lsp-client-v0.2.7/packages/lsp-client/src/index.js'
 
 import { TypecheckingService } from './typechecking_service.js'
 import { typecheckingAssets } from './typechecking_assets.js'

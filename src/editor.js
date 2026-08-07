@@ -334,6 +334,7 @@ function ruffLinter(ruff) {
         to:   doc.line(d.end_location.row).from + d.end_location.column - 1,
         severity: (d.message.indexOf('Error:') >= 0) ? 'error' : 'warning',
         message: d.code ? d.code + ': ' + d.message : d.message,
+        source: 'Ruff',
       })
     }
     return diagnostics
