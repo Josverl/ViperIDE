@@ -212,11 +212,14 @@ function openEditorDiagnostics() {
             editors.set(path, { path, diagnostics: getEditorDiagnostics(view) })
         }
     }
+    const openPaths = new Set(editors.keys())
     for (const diagnostic of collectDiagnosticEntries(typechecking.snapshot().diagnosticStatus)) {
         const encodedPath = diagnostic.fileName ||
             diagnostic.uri?.replace(/^file:\/\/\/workspace\//, '')
         if (!encodedPath) { continue }
         const path = '/' + encodedPath.split('/').map(decodeURIComponent).join('/')
+        // Open editors own their live lint state; the workspace cache fills unopened files only.
+        if (openPaths.has(path)) { continue }
         if (!editors.has(path)) {
             editors.set(path, { path, diagnostics: [] })
         }
