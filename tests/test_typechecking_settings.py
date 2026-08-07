@@ -41,6 +41,9 @@ def test_typechecking_mode_and_board_override_persist(page, viperide_server, tmp
     expect(board.locator("option")).to_have_count(7)
     expect(board.locator("option[value=stdlib]")).to_have_count(0)
     expect(board.locator("option[value=rp2]")).to_have_text("MP RP2 (v1.28.0)")
+    expect(board.locator("option[value=webassembly]")).to_have_text(
+        "MP WebAssembly (v1.28.0)"
+    )
     mode.select_option("strict")
     expect(status).to_have_attribute("title", re.compile(r"strict mode with webassembly stubs"), timeout=90_000)
 
