@@ -15,7 +15,7 @@ const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'))
 // default to the local development server.
 const BASE_URL = process.env.VIPER_IDE_BASE_URL || 'http://localhost:10001'
 const LSP_CLIENT_CDN_BASE =
-  'https://cdn.jsdelivr.net/gh/Josverl/stubs_playground@lsp-client-v0.2.5/'
+  'https://cdn.jsdelivr.net/gh/Josverl/stubs_playground@lsp-client-v0.2.6/'
 
 const copyHtml = (src, dst) => {
   let data = fs.readFileSync(src, 'utf8').

@@ -60,3 +60,56 @@ def test_diagnostics_panel_filters_jumps_and_run_returns_to_terminal(
     expect(page.locator("#xterm")).to_have_class(re.compile(r"\bactive\b"))
     expect(page.locator(".xterm-helper-textarea")).to_be_focused()
     assert console_errors == []
+
+
+def test_pyright_diagnostics_are_merged_with_host_linters(
+    page, viperide_server, tmp_path
+):
+    page.on("dialog", lambda dialog: dialog.dismiss())
+    page.goto(f"{viperide_server}/?vm=1", wait_until="domcontentloaded")
+
+    status = page.locator("#typechecking-status")
+    expect(status).to_have_attribute(
+        "title", re.compile(r"standard mode with webassembly stubs"), timeout=90_000
+    )
+
+    page.locator(".cm-content").fill(
+        "from typing_extensions import reveal_type\n"
+        "\n"
+        "import rp2\n"
+        "import idonotexist\n"
+        "import micropython\n"
+        "\n"
+        "reveal_type(idonotexist)\n"
+    )
+    page.locator('[data-target="diagnostics"]').click()
+
+    pyright_rows = page.locator(".diagnostic-item").filter(
+        has=page.locator(".diagnostic-source", has_text="Pyright")
+    )
+    expect(pyright_rows).to_have_count(5, timeout=30_000)
+
+    results = pyright_rows.evaluate_all(
+        """rows => rows.map(row => ({
+            severity: row.dataset.severity,
+            message: row.querySelector('.diagnostic-message').textContent,
+            source: row.querySelector('.diagnostic-source').textContent,
+        }))"""
+    )
+    assert [result["severity"] for result in results].count("error") == 2
+    assert [result["severity"] for result in results].count("warning") == 2
+    assert [result["severity"] for result in results].count("info") == 1
+    assert any('Import "rp2" could not be resolved' in result["message"] for result in results)
+    assert any(
+        'Import "idonotexist" could not be resolved' in result["message"]
+        for result in results
+    )
+    assert any(
+        'Type of "idonotexist" is "Module("idonotexist")"' in result["message"]
+        for result in results
+    )
+    expect(page.locator(".cm-lintRange-error")).to_have_count(2)
+    expect(page.locator(".cm-lintRange-info")).to_have_count(1)
+    expect(page.locator(".cm-lintPoint-error")).to_have_count(0)
+    expect(page.locator(".cm-lintPoint-info")).to_have_count(0)
+    page.screenshot(path=tmp_path / "diagnostics-panel-pyright.png")
