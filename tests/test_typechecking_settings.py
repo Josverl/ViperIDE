@@ -75,3 +75,49 @@ def test_typechecking_mode_and_board_override_persist(page, viperide_server, tmp
     expect(editor).to_contain_text("def identity(value):")
     assert console_errors == []
     page.screenshot(path=tmp_path / "typechecking-settings-basic-rp2.png")
+
+
+def test_typechecking_stub_packages_install_and_persist(page, viperide_server, tmp_path):
+    page.add_init_script(
+        """
+        localStorage.setItem('settings', JSON.stringify({'typecheck-enabled': true}));
+        """
+    )
+    page.goto(f"{viperide_server}/?vm=1", wait_until="domcontentloaded")
+    expect(page.locator("#typecheck-tab")).to_have_attribute(
+        "data-state", "ready", timeout=90_000
+    )
+    page.locator('[data-target="menu-settings"]').click()
+
+    package_input = page.locator("#typecheck-stub-package")
+    package_input.fill("types-requests")
+    package_input.press("Enter")
+    expect(page.locator("#typecheck-stub-status")).to_contain_text(
+        "Installed types-requests@",
+        timeout=90_000,
+    )
+
+    page.reload(wait_until="domcontentloaded")
+    expect(page.locator("#typecheck-tab")).to_have_attribute(
+        "data-state", "ready", timeout=90_000
+    )
+    page.locator('[data-target="menu-settings"]').click()
+    expect(page.locator("#typecheck-stub-status")).to_contain_text(
+        "types-requests@",
+        timeout=90_000,
+    )
+    page.screenshot(path=tmp_path / "typechecking-persistent-stub-package.png")
+
+    page.locator("#typecheck-stub-clear").click()
+    expect(page.locator("#typecheck-stub-status")).to_have_text(
+        "No cached stub packages.",
+        timeout=90_000,
+    )
+
+    page.locator("#typecheck-enabled").uncheck()
+    expect(page.locator("#typecheck-stub-package")).to_be_disabled()
+    expect(page.locator("#typecheck-stub-install")).to_be_disabled()
+    expect(page.locator("#typecheck-stub-clear")).to_be_disabled()
+    expect(page.locator("#typecheck-stub-status")).to_have_text(
+        "Enable type checking to view or manage cached stub packages."
+    )

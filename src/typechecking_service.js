@@ -62,6 +62,7 @@ export class TypecheckingService {
     this.generation = 0
     this.clientConfig = null
     this.switching = null
+    this.restarting = null
     this.statusListeners = new Set()
   }
 
@@ -387,6 +388,79 @@ export class TypecheckingService {
         this.switching = null
       })
     return this.switching
+  }
+
+  requireStubPackageTransport() {
+    if (this.status !== 'ready' || !this.transport) {
+      throw new Error('TypecheckingService must be ready to manage stub packages')
+    }
+    return this.transport
+  }
+
+  async runStubPackageQuery(query) {
+    if (this.initializing) { await this.initializing }
+    if (this.switching) { await this.switching }
+    if (this.restarting) { await this.restarting }
+    const transport = this.requireStubPackageTransport()
+    try {
+      return await query(transport)
+    } catch (error) {
+      if (this.restarting) {
+        await this.restarting
+        return query(this.requireStubPackageTransport())
+      }
+      if (this.initializing) {
+        await this.initializing
+        return query(this.requireStubPackageTransport())
+      }
+      if (this.switching) {
+        await this.switching
+        return query(this.requireStubPackageTransport())
+      }
+      if (transport !== this.transport && this.status === 'ready') {
+        return query(this.requireStubPackageTransport())
+      }
+      throw error
+    }
+  }
+
+  listStubPackages() {
+    return this.runStubPackageQuery(transport => transport.listStubPackages())
+  }
+
+  listInstalledStubPackages() {
+    return this.runStubPackageQuery(transport => transport.listInstalledStubPackages())
+  }
+
+  async restartRuntime(configOverrides = {}) {
+    if (this.restarting) { return this.restarting }
+    const config = { ...this.clientConfig, ...configOverrides }
+    this.restarting = (async () => {
+      this.disable()
+      await this.initialize(config)
+      return this.snapshot()
+    })()
+    try {
+      return await this.restarting
+    } finally {
+      this.restarting = null
+    }
+  }
+
+  async installStubPackage(packageName, versionSpecifier = '') {
+    const installed = await this.requireStubPackageTransport().
+      installStubPackage(packageName, versionSpecifier)
+    await this.restartRuntime()
+    return installed
+  }
+
+  async clearStubPackages(packageName, version) {
+    const result = await this.requireStubPackageTransport().
+      clearStubPackages(packageName, version)
+    if (result.restartRequired) {
+      await this.restartRuntime()
+    }
+    return result
   }
 
   rebindEditors() {

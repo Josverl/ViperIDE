@@ -9,6 +9,7 @@ import {
     normalizeTypecheckingBoard,
     normalizeTypecheckingMode,
     normalizeTypecheckingScope,
+    parseStubPackageSpecifier,
     resolveTypecheckingBoard,
     simpleStubVersion,
     typecheckingBoardOptions,
@@ -45,6 +46,31 @@ describe('type-checking settings', () => {
         ])
         assert.strictEqual(simpleStubVersion('1.28.0.post12'), 'v1.28.0')
         assert.strictEqual(simpleStubVersion(''), '')
+    })
+
+    it('uses active cached versions in board labels and parses install requests', () => {
+        const options = typecheckingBoardOptions({
+            boards: [{
+                id: 'esp32',
+                package: 'micropython-esp32-stubs',
+                package_version: '1.27.0.post1',
+            }],
+        }, [{
+            packageName: 'micropython-esp32-stubs',
+            version: '1.28.0.post4',
+            active: true,
+        }])
+
+        assert.deepEqual(options, [{ id: 'esp32', label: 'MP ESP32 (v1.28.0)' }])
+        assert.deepEqual(parseStubPackageSpecifier('MicroPython_ESP32_Stubs==1.28.0.post4'), {
+            packageName: 'micropython-esp32-stubs',
+            versionSpecifier: '==1.28.0.post4',
+        })
+        assert.deepEqual(parseStubPackageSpecifier('types-requests~=2.32'), {
+            packageName: 'types-requests',
+            versionSpecifier: '~=2.32',
+        })
+        assert.throws(() => parseStubPackageSpecifier('package latest'), /Invalid/)
     })
 
     it('uses the connected platform only when the board setting is automatic', () => {

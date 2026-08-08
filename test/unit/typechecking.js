@@ -167,6 +167,106 @@ describe('TypecheckingService', () => {
         assert.throws(() => service.changeDocument(uri), /not open/)
     })
 
+    it('exposes reusable worker stub package management and restarts after install', async () => {
+        const first = resources()
+        const second = resources()
+        const results = [first, second]
+        first.transport.listStubPackages = async () => [{ packageName: 'micropython-rp2-stubs' }]
+        first.transport.listInstalledStubPackages = async () => []
+        first.transport.installStubPackage = async (packageName, versionSpecifier) => ({
+            packageName,
+            version: versionSpecifier.slice(2),
+        })
+        second.transport.clearStubPackages = async () => ({
+            removed: 0,
+            restartRequired: false,
+        })
+        let prepareCalls = 0
+        const service = new TypecheckingService({
+            createLSPClient: async () => results.shift(),
+            prepareRuntime: async config => {
+                prepareCalls++
+                return {
+                    workerUrl: `blob:worker-${prepareCalls}`,
+                    boardStubs: new ArrayBuffer(1),
+                    stubBundle: { id: config.boardId },
+                }
+            },
+        })
+        await service.initialize({ boardId: 'rp2' })
+
+        assert.deepEqual(await service.listStubPackages(), [{
+            packageName: 'micropython-rp2-stubs',
+        }])
+        assert.deepEqual(await service.listInstalledStubPackages(), [])
+        assert.deepEqual(
+            await service.installStubPackage('micropython-rp2-stubs', '==1.28.0.post4'),
+            {
+                packageName: 'micropython-rp2-stubs',
+                version: '1.28.0.post4',
+            },
+        )
+
+        assert.strictEqual(service.status, 'ready')
+        assert.strictEqual(service.transport, second.transport)
+        assert.strictEqual(first.transport.closeCalls, 1)
+        assert.strictEqual(prepareCalls, 2)
+        assert.deepEqual(await service.clearStubPackages(), {
+            removed: 0,
+            restartRequired: false,
+        })
+    })
+
+    it('retries read-only stub package queries after worker replacement', async () => {
+        const first = resources()
+        const second = resources()
+        let rejectFirst
+        first.transport.listInstalledStubPackages = () => new Promise((resolve, reject) => {
+            rejectFirst = reject
+        })
+        second.transport.listInstalledStubPackages = async () => [{
+            packageName: 'types-requests',
+            version: '2.32.4',
+            active: true,
+        }]
+        const service = new TypecheckingService({
+            createLSPClient: async () => first,
+        })
+        await service.initialize({ workerUrl: 'blob:first' })
+
+        const query = service.listInstalledStubPackages()
+        service.transport = second.transport
+        rejectFirst(new Error('Worker transport closed'))
+
+        assert.deepEqual(await query, [{
+            packageName: 'types-requests',
+            version: '2.32.4',
+            active: true,
+        }])
+    })
+
+    it('retries read-only stub package queries after a full runtime restart', async () => {
+        const first = resources()
+        const second = resources()
+        const results = [first, second]
+        let rejectFirst
+        first.transport.listStubPackages = () => new Promise((resolve, reject) => {
+            rejectFirst = reject
+        })
+        second.transport.listStubPackages = async () => [{ packageName: 'types-requests' }]
+        const service = new TypecheckingService({
+            createLSPClient: async () => results.shift(),
+        })
+        await service.initialize({ workerUrl: 'blob:first' })
+
+        const query = service.listStubPackages()
+        const restart = service.restartRuntime()
+        rejectFirst(new Error('Worker transport closed'))
+        await restart
+
+        assert.deepEqual(await query, [{ packageName: 'types-requests' }])
+    })
+
     it('binds an editor with an encoded workspace URI', async () => {
         const result = resources()
         const configured = []

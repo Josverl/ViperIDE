@@ -36,6 +36,7 @@ import { createBrowserVM, SYSTEM_DIRS } from './emulator.js'
 import { getSetting, onSettingChange, updateSetting } from './settings.js'
 import {
     normalizeTypecheckingBoard,
+    parseStubPackageSpecifier,
     resolveTypecheckingBoard,
     typecheckingBoardOptions,
     typecheckingRuntimeConfig,
@@ -197,12 +198,19 @@ function setDeviceState(newState) {
 }
 
 function updateTypecheckingUI(snapshot = typechecking.snapshot()) {
+    const packageControlsEnabled = getSetting('typecheck-enabled') && snapshot.status === 'ready'
     renderTypecheckingStatus(
         QID('typecheck-tab'),
         QID('typecheck-enabled'),
         snapshot,
         getSetting('typecheck-enabled'),
     )
+    QID('typecheck-stub-package').disabled = !packageControlsEnabled
+    QID('typecheck-stub-install').disabled = !packageControlsEnabled
+    QID('typecheck-stub-clear').disabled = !packageControlsEnabled
+    if (!getSetting('typecheck-enabled')) {
+        setTypecheckingStubStatus('Enable type checking to view or manage cached stub packages.')
+    }
     updateDiagnosticsPanel()
 }
 
@@ -259,15 +267,74 @@ async function jumpToDiagnostic(path, line, character) {
     if (view) { goToDocumentPosition(view, line, character) }
 }
 
-async function updateTypecheckingBoardOptions() {
+async function updateTypecheckingBoardOptions(installedPackages = []) {
     const select = QID('typecheck-stubs')
     const manifest = await loadTypecheckingStubManifest()
     const selected = normalizeTypecheckingBoard(getSetting('typecheck-stubs'))
     select.replaceChildren(new Option('Automatic', 'auto'))
-    for (const board of typecheckingBoardOptions(manifest)) {
+    for (const board of typecheckingBoardOptions(manifest, installedPackages)) {
         select.add(new Option(board.label, board.id))
     }
     select.value = selected
+}
+
+function setTypecheckingStubStatus(message) {
+    QID('typecheck-stub-status').textContent = message
+}
+
+async function refreshTypecheckingStubPackages() {
+    const [catalog, installed] = await Promise.all([
+        typechecking.listStubPackages(),
+        typechecking.listInstalledStubPackages(),
+    ])
+    const dataList = QID('typecheck-stub-catalog')
+    dataList.replaceChildren()
+    for (const stubPackage of catalog) {
+        for (const release of stubPackage.versions || []) {
+            const option = new Option(
+                `${stubPackage.packageName}==${release.version}`,
+                `${stubPackage.packageName}==${release.version}`,
+            )
+            option.label = stubPackage.label
+            dataList.appendChild(option)
+        }
+    }
+    await updateTypecheckingBoardOptions(installed)
+    const active = installed.filter(entry => entry.active)
+    setTypecheckingStubStatus(active.length
+        ? `Cached: ${active.map(entry => `${entry.packageName}@${entry.version}`).join(', ')}`
+        : 'No cached stub packages.')
+}
+
+async function installTypecheckingStubPackage() {
+    const input = QID('typecheck-stub-package')
+    const installButton = QID('typecheck-stub-install')
+    const specifier = parseStubPackageSpecifier(input.value)
+    installButton.disabled = true
+    setTypecheckingStubStatus(`Installing ${specifier.packageName}...`)
+    try {
+        const installed = await typechecking.installStubPackage(
+            specifier.packageName,
+            specifier.versionSpecifier,
+        )
+        input.value = ''
+        await refreshTypecheckingStubPackages()
+        setTypecheckingStubStatus(`Installed ${installed.packageName}@${installed.version}`)
+    } finally {
+        updateTypecheckingUI()
+    }
+}
+
+async function clearTypecheckingStubPackages() {
+    const clearButton = QID('typecheck-stub-clear')
+    clearButton.disabled = true
+    setTypecheckingStubStatus('Clearing cached stub packages...')
+    try {
+        await typechecking.clearStubPackages()
+        await refreshTypecheckingStubPackages()
+    } finally {
+        updateTypecheckingUI()
+    }
 }
 
 async function applyTypecheckingSetting(enabled) {
@@ -278,6 +345,8 @@ async function applyTypecheckingSetting(enabled) {
 
     await typechecking.initialize(currentTypecheckingConfig())
     await syncConnectedTypecheckingWorkspace()
+    void refreshTypecheckingStubPackages().
+        catch(err => report('Unable to load current type-stub packages', err))
 }
 
 function currentTypecheckingConfig() {
@@ -315,9 +384,10 @@ function queueTypecheckingReconfiguration({ syncWorkspace = false } = {}) {
             if (!getSetting('typecheck-enabled')) { return }
             const status = typechecking.snapshot().status
             if (status !== 'idle' && status !== 'disabled') {
-                typechecking.disable()
+                await typechecking.restartRuntime(currentTypecheckingConfig())
+            } else {
+                await typechecking.initialize(currentTypecheckingConfig())
             }
-            await typechecking.initialize(currentTypecheckingConfig())
             if (syncWorkspace) {
                 await syncConnectedTypecheckingWorkspace()
             }
@@ -2413,6 +2483,8 @@ export function applyTranslation() {
         QS('label[for=typecheck-mode]').innerText = T('settings.typecheck-mode')
         QS('label[for=typecheck-scope]').innerText = T('settings.typecheck-scope')
         QS('label[for=typecheck-stubs]').innerText = T('settings.typecheck-stubs')
+        QS('label[for=typecheck-stub-package]').innerText = T('settings.typecheck-stub-package')
+        QID('typecheck-stub-package-help').innerText = T('settings.typecheck-stub-package-help')
         QS('label[for=use-natural-sort]').innerText = T('settings.use-natural-sort')
 
         QS('label[for=lang]').innerText = T('settings.lang')
@@ -2568,6 +2640,19 @@ function showOfflineReadyToast(version) {
     onSettingChange('typecheck-scope', () =>
         queueTypecheckingReconfiguration({ syncWorkspace: true }))
     onSettingChange('typecheck-stubs', queueTypecheckingReconfiguration)
+    QID('typecheck-stub-install').addEventListener('click', () => {
+        typecheckingAction = typecheckingAction.
+            then(installTypecheckingStubPackage).
+            catch(err => report('Unable to install type stubs', err))
+    })
+    QID('typecheck-stub-clear').addEventListener('click', () => {
+        typecheckingAction = typecheckingAction.
+            then(clearTypecheckingStubPackages).
+            catch(err => report('Unable to clear cached type stubs', err))
+    })
+    QID('typecheck-stub-package').addEventListener('keydown', event => {
+        if (event.key === 'Enter') { QID('typecheck-stub-install').click() }
+    })
 
     initLaunchHandler()
     applyTranslation()

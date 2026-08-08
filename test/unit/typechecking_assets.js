@@ -52,15 +52,12 @@ describe('TypecheckingAssets', () => {
         }
     })
 
-    it('loads the manifest and selected stubs from the pinned tag', async () => {
+    it('loads the manifest and defers the selected fallback archive to the worker', async () => {
         const requests = []
-        const stubs = new Uint8Array([1, 2, 3]).buffer
         const assets = new TypecheckingAssets({
             fetch: async url => {
                 requests.push(url)
-                return url.endsWith('stubs-manifest.json')
-                    ? response({ json: manifest })
-                    : response({ bytes: stubs })
+                return response({ json: manifest })
             },
             Blob: class FakeBlob {
                 constructor(parts, options) {
@@ -69,7 +66,7 @@ describe('TypecheckingAssets', () => {
                 }
             },
             createObjectURL: blob => {
-                assert.include(blob.parts[0], 'pyright-worker-v0.2.3')
+                assert.include(blob.parts[0], 'pyright-worker-v0.2.4')
                 return 'blob:worker'
             },
         })
@@ -78,11 +75,15 @@ describe('TypecheckingAssets', () => {
 
         assert.strictEqual(runtime.workerUrl, 'blob:worker')
         assert.strictEqual(runtime.workerBlobUrl, 'blob:worker')
-        assert.strictEqual(runtime.boardStubs, stubs)
+        assert.isUndefined(runtime.boardStubs)
+        assert.match(runtime.boardStubsUrl, /stubs-esp32\.zip$/)
+        assert.deepEqual(runtime.boardStubPackage, {
+            packageName: 'esp32-stubs',
+            fallbackToBundled: true,
+        })
         assert.strictEqual(runtime.stubBundle.id, 'esp32')
-        assert.lengthOf(requests, 2)
-        assert.match(requests[0], /pyright-worker-v0\.2\.3.*stubs-manifest\.json$/)
-        assert.match(requests[1], /pyright-worker-v0\.2\.3.*stubs-esp32\.zip$/)
+        assert.lengthOf(requests, 1)
+        assert.match(requests[0], /pyright-worker-v0\.2\.4.*stubs-manifest\.json$/)
     })
 
     it('creates one worker Blob URL and caches immutable assets', async () => {
@@ -103,7 +104,7 @@ describe('TypecheckingAssets', () => {
 
         assert.strictEqual(first.workerUrl, second.workerUrl)
         assert.strictEqual(blobUrls, 1)
-        assert.strictEqual(fetchCalls, 2)
+        assert.strictEqual(fetchCalls, 1)
     })
 
     it('uses false for a manifest entry without a stub archive', async () => {

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: MIT
  */
 
-const WORKER_TAG = 'pyright-worker-v0.2.3'
+const WORKER_TAG = 'pyright-worker-v0.2.4'
 const CDN_ROOT = `https://cdn.jsdelivr.net/gh/Josverl/stubs_playground@${WORKER_TAG}/`
 const WORKER_URL = `${CDN_ROOT}packages/pyright-worker/dist/pyright_worker.js`
 const ASSETS_BASE = `${CDN_ROOT}packages/pyright-worker/assets`
@@ -23,23 +23,31 @@ export class TypecheckingAssets {
     this.BlobClass = BlobClass
     this.createObjectURL = createObjectURL
     this.manifestPromise = null
-    this.stubs = new Map()
     this.workerBlobUrl = null
   }
 
-  async prepare(boardId) {
+  async prepare(config = {}) {
     const manifest = await this.loadManifest()
+    const boardId = typeof config === 'string' ? config : config.boardId
     const selectedId = boardId || manifest.default
     const board = manifest.boards.find(item => item.id === selectedId)
     if (!board) {
       throw new Error(`Unknown type-checking stub bundle: ${selectedId}`)
     }
 
-    const boardStubs = await this.loadStubs(board)
     return {
       workerUrl: this.getWorkerBlobUrl(),
       workerBlobUrl: this.workerBlobUrl,
-      boardStubs,
+      boardStubs: board.file ? undefined : false,
+      ...(board.file ? { boardStubsUrl: `${ASSETS_BASE}/${board.file}` } : {}),
+      ...(board.file && board.package
+        ? {
+            boardStubPackage: {
+              packageName: board.package,
+              fallbackToBundled: true,
+            },
+          }
+        : {}),
       stubBundle: Object.freeze({ ...board }),
     }
   }
@@ -62,21 +70,6 @@ export class TypecheckingAssets {
         })
     }
     return this.manifestPromise
-  }
-
-  async loadStubs(board) {
-    if (!board.file) { return false }
-    if (!this.stubs.has(board.id)) {
-      const loading = this.fetchAsset(`${ASSETS_BASE}/${board.file}`).
-        then(response => this.requireResponse(response, `stubs for ${board.id}`)).
-        then(response => response.arrayBuffer()).
-        catch(error => {
-          this.stubs.delete(board.id)
-          throw error
-        })
-      this.stubs.set(board.id, loading)
-    }
-    return this.stubs.get(board.id)
   }
 
   requireResponse(response, description) {

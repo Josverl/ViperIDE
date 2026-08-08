@@ -141,6 +141,15 @@
                             <option value="circuitpython">CircuitPython</option>
                         </select>
                     </div>
+                    <div>
+                        <label for="typecheck-stub-package">Install type stubs from PyPI:</label>
+                        <input id="typecheck-stub-package" list="typecheck-stub-catalog" placeholder="types-requests==2.32.4.20260107"/>
+                        <datalist id="typecheck-stub-catalog"></datalist>
+                        <button id="typecheck-stub-install" type="button">Install</button>
+                        <button id="typecheck-stub-clear" type="button">Clear cached</button>
+                        <div id="typecheck-stub-package-help">Choose a suggested MicroPython package or enter any type-only wheel from PyPI.</div>
+                        <div id="typecheck-stub-status" aria-live="polite">No cached stub packages.</div>
+                    </div>
                     <div class="title-lines" id="menu-line-pkg-mgr">package manager</div>
                     <div><input type="checkbox" id="install-package-source"/><label for="install-package-source">Prefer installing sources (.py)</label></div>
                     <div class="title-lines" id="menu-line-other">other</div>

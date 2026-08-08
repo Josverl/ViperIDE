@@ -52,11 +52,34 @@ export function simpleStubVersion(version) {
     return `v${version.trim().replace(/\.post\d+.*$/, '')}`
 }
 
-export function typecheckingBoardOptions(manifest) {
+function normalizePackageName(value) {
+    return String(value || '').trim().toLowerCase().replace(/[-_.]+/g, '-')
+}
+
+export function parseStubPackageSpecifier(value) {
+    const match = /^([A-Za-z0-9][A-Za-z0-9._-]*)(.*)$/.exec(String(value || '').trim())
+    if (!match) { throw new Error('Invalid package specifier') }
+    const versionSpecifier = match[2].trim()
+    if (versionSpecifier && !/^(==|!=|~=|>=|<=|>|<)/.test(versionSpecifier)) {
+        throw new Error('Invalid stub package version constraint')
+    }
+    return {
+        packageName: normalizePackageName(match[1]),
+        versionSpecifier,
+    }
+}
+
+export function typecheckingBoardOptions(manifest, installedPackages = []) {
+    const installedVersions = new Map(
+        installedPackages.
+            filter(entry => entry?.active).
+            map(entry => [normalizePackageName(entry.packageName), entry.version]),
+    )
     return (manifest?.boards || []).
         filter(board => TYPECHECKING_BOARD_LABELS.has(board.id)).
         map(board => {
-            const version = simpleStubVersion(board.package_version)
+            const installedVersion = installedVersions.get(normalizePackageName(board.package))
+            const version = simpleStubVersion(installedVersion || board.package_version)
             return {
                 id: board.id,
                 label: `${TYPECHECKING_BOARD_LABELS.get(board.id)}${version ? ` (${version})` : ''}`,

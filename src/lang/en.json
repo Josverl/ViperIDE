@@ -42,6 +42,8 @@
             "typecheck-mode": "Type-check mode",
             "typecheck-scope": "Type-check files",
             "typecheck-stubs": "Type stubs",
+            "typecheck-stub-package": "Install type stubs from PyPI",
+            "typecheck-stub-package-help": "Choose a suggested MicroPython package or enter any type-only wheel from PyPI.",
             "use-natural-sort": "Natural sorting",
             "lang": "Language",
             "zoom": "Zoom",
