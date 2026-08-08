@@ -8,6 +8,31 @@ function decodePython(bytes) {
     return new TextDecoder('utf-8', { fatal: true }).decode(bytes)
 }
 
+export function shouldMirrorDevicePythonWorkspace(enabled, scope) {
+    return enabled === true && scope === 'workspace'
+}
+
+export async function syncDevicePythonWorkspace({
+    enabled,
+    scope,
+    raw,
+    fsCache,
+    isSpecialPath,
+    replaceWorkspace,
+}) {
+    if (!shouldMirrorDevicePythonWorkspace(enabled, scope)) {
+        return { mirrored: false, files: {}, errors: [] }
+    }
+    if (typeof replaceWorkspace !== 'function') {
+        throw new TypeError('Device workspace sync requires replaceWorkspace')
+    }
+    const workspace = await readDevicePythonWorkspace(raw, fsCache, isSpecialPath)
+    replaceWorkspace(workspace.files, {
+        preservePaths: workspace.errors.map(({ path }) => path),
+    })
+    return { mirrored: true, ...workspace }
+}
+
 export async function readDevicePythonWorkspace(raw, fsCache, isSpecialPath) {
     const files = {}
     const errors = []

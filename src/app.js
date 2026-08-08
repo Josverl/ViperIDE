@@ -57,7 +57,10 @@ import { createZipSync } from './zip.js'
 import { initControlClient } from './control_client.js'
 import { loadTypecheckingStubManifest, typechecking } from './typechecking.js'
 import { collectDiagnosticEntries, renderTypecheckingStatus } from './typechecking_status.js'
-import { readDevicePythonWorkspace } from './typechecking_workspace.js'
+import {
+    shouldMirrorDevicePythonWorkspace,
+    syncDevicePythonWorkspace,
+} from './typechecking_workspace.js'
 import {
     diagnosticsPanelPresentation,
     normalizeDiagnosticsFilters,
@@ -274,6 +277,7 @@ async function applyTypecheckingSetting(enabled) {
     }
 
     await typechecking.initialize(currentTypecheckingConfig())
+    await syncConnectedTypecheckingWorkspace()
 }
 
 function currentTypecheckingConfig() {
@@ -305,7 +309,7 @@ function queueTypecheckingDeviceSelection() {
     return typecheckingAction
 }
 
-function queueTypecheckingReconfiguration() {
+function queueTypecheckingReconfiguration({ syncWorkspace = false } = {}) {
     typecheckingAction = typecheckingAction.
         then(async () => {
             if (!getSetting('typecheck-enabled')) { return }
@@ -314,6 +318,9 @@ function queueTypecheckingReconfiguration() {
                 typechecking.disable()
             }
             await typechecking.initialize(currentTypecheckingConfig())
+            if (syncWorkspace) {
+                await syncConnectedTypecheckingWorkspace()
+            }
         }).
         catch(err => report('Unable to apply type-checking settings', err))
     return typecheckingAction
@@ -1365,14 +1372,38 @@ async function _raw_updateFileTree(raw) {
 
     await _raw_reconcileOpenTabs(raw, delta)
     await _raw_restoreDrafts(raw)
-    const workspace = await readDevicePythonWorkspace(raw, fsCache, isSpecialPath)
-    typechecking.replaceWorkspace(workspace.files, {
-        preservePaths: workspace.errors.map(({ path }) => path),
+    await _raw_syncTypecheckingWorkspace(raw)
+    return delta
+}
+
+async function _raw_syncTypecheckingWorkspace(raw) {
+    const workspace = await syncDevicePythonWorkspace({
+        enabled: getSetting('typecheck-enabled'),
+        scope: getSetting('typecheck-scope'),
+        raw,
+        fsCache,
+        isSpecialPath,
+        replaceWorkspace: (files, options) => typechecking.replaceWorkspace(files, options),
     })
     for (const { path, error } of workspace.errors) {
         console.warn(`Unable to mirror ${path} for type checking`, error)
     }
-    return delta
+    return workspace.mirrored
+}
+
+async function syncConnectedTypecheckingWorkspace() {
+    if (!portReady() || !shouldMirrorDevicePythonWorkspace(
+        getSetting('typecheck-enabled'),
+        getSetting('typecheck-scope'),
+    )) {
+        return false
+    }
+    const raw = await MpRawMode.begin(port)
+    try {
+        return await _raw_syncTypecheckingWorkspace(raw)
+    } finally {
+        try { await raw.end() } catch (_err) { /* device may have disconnected */ }
+    }
 }
 
 /*
@@ -2534,7 +2565,8 @@ function showOfflineReadyToast(version) {
     updateTypecheckingBoardOptions().catch(err => report('Unable to load type-stub versions', err))
     onSettingChange('typecheck-enabled', queueTypecheckingSetting)
     onSettingChange('typecheck-mode', queueTypecheckingReconfiguration)
-    onSettingChange('typecheck-scope', queueTypecheckingReconfiguration)
+    onSettingChange('typecheck-scope', () =>
+        queueTypecheckingReconfiguration({ syncWorkspace: true }))
     onSettingChange('typecheck-stubs', queueTypecheckingReconfiguration)
 
     initLaunchHandler()

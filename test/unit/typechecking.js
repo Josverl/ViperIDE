@@ -244,11 +244,13 @@ describe('TypecheckingService', () => {
         await service.initialize({ workerUrl: 'blob:first' })
         const view = editor('draft')
         await service.bindEditor(view, 'main.py')
+        service.replaceWorkspace({ 'cached.py': 'cached = True' })
 
         assert.isTrue(service.disable())
         assert.strictEqual(service.status, 'disabled')
         assert.strictEqual(service.editorBindings.size, 1)
         assert.strictEqual(service.documentVersions.size, 0)
+        assert.strictEqual(service.workspaceFiles.get('cached.py'), 'cached = True')
         assert.deepEqual(configured.at(-1), [])
         assert.deepEqual(closes, ['file:///workspace/main.py'])
         assert.strictEqual(first.client.disconnectCalls, 1)
