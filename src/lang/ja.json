@@ -31,6 +31,7 @@
             "conn": "接続",
             "editor": "エディター",
             "other": "その他",
+            "typechecking": "型チェック",
             "interrupt-running-code": "実行を中断",
             "force-serial-poly": "WebSerial の代わりに WebUSB を使用する",
             "expand-minify-json": "JSONの自動圧縮",

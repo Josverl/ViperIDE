@@ -31,6 +31,7 @@
             "conn": "कनेक्शन",
             "editor": "संपादक",
             "other": "अन्य",
+            "typechecking": "प्रकार जाँच",
             "interrupt-running-code": "प्रोग्राम रुकावट",
             "force-serial-poly": "WebSerial के बजाय WebUSB का उपयोग करें",
             "expand-minify-json": "JSON का स्वचालित-संपीड़न",

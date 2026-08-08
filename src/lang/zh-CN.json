@@ -31,6 +31,7 @@
             "conn": "连接",
             "editor": "编辑器",
             "other": "其他",
+            "typechecking": "类型检查",
             "interrupt-running-code": "中断执行",
             "force-serial-poly": "使用 WebUSB 而不是 WebSerial",
             "expand-minify-json": "JSON 自动缩小",

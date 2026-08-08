@@ -31,6 +31,7 @@
             "conn": "підключення",
             "editor": "редактор",
             "other": "решта",
+            "typechecking": "Перевірка типів",
             "interrupt-running-code": "Переривати виконання",
             "force-serial-poly": "Використовувати WebUSB замість WebSerial",
             "expand-minify-json": "Авто-стиснення JSON",

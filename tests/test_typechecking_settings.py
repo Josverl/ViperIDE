@@ -44,6 +44,28 @@ def test_typechecking_mode_and_board_override_persist(page, viperide_server, tmp
     expect(board.locator("option[value=webassembly]")).to_have_text(
         "MP WebAssembly (v1.28.0)"
     )
+    assert page.locator("#menu-line-other").evaluate(
+        "(other) => Boolean(other.compareDocumentPosition("
+        "document.querySelector('#menu-line-typechecking')) & Node.DOCUMENT_POSITION_FOLLOWING)"
+    )
+    expect(page.locator("#menu-line-typechecking")).to_have_text("Typechecking")
+    expect(page.locator("#typecheck-stub-package-help")).to_have_count(0)
+    for dropdown in (mode, scope, board):
+        assert dropdown.evaluate("(element) => getComputedStyle(element).textAlign") == "right"
+    for button_id in ("#typecheck-stub-install", "#typecheck-stub-clear"):
+        button_style = page.locator(button_id).evaluate(
+            """(element) => {
+                const style = getComputedStyle(element);
+                return {
+                    borderStyle: style.borderStyle,
+                    borderWidth: style.borderWidth,
+                    fontSize: parseFloat(style.fontSize),
+                };
+            }"""
+        )
+        assert button_style["borderStyle"] == "solid"
+        assert button_style["borderWidth"] == "1px"
+        assert button_style["fontSize"] < 14
     mode.select_option("strict")
     expect(status).to_have_attribute("title", re.compile(r"strict mode with webassembly stubs"), timeout=90_000)
 

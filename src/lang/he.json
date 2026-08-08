@@ -31,6 +31,7 @@
             "conn": "חיבור",
             "editor": "עורך",
             "other": "אחרים",
+            "typechecking": "בדיקת טיפוסים",
             "interrupt-running-code": "להפסיק את הביצוע",
             "force-serial-poly": "שימוש ב-WebUSB במקום WebSerial",
             "expand-minify-json": "מיניפיקציה אוטומטית של JSON",

@@ -31,6 +31,7 @@
             "conn": "koneksi",
             "editor": "editor",
             "other": "lainnya",
+            "typechecking": "Pemeriksaan tipe",
             "interrupt-running-code": "Hentikan eksekusi",
             "force-serial-poly": "Gunakan WebUSB sebagai pengganti WebSerial",
             "expand-minify-json": "Minifikasi otomatis JSON",

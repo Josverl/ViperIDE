@@ -31,6 +31,7 @@
             "conn": "connessione",
             "editor": "editor",
             "other": "altro",
+            "typechecking": "Controllo dei tipi",
             "interrupt-running-code": "Interrompi esecuzione",
             "force-serial-poly": "Usa WebUSB invece di WebSerial",
             "expand-minify-json": "Minificazione automatica di JSON",

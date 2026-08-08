@@ -31,6 +31,7 @@
             "conn": "соединение",
             "editor": "редактор",
             "other": "другое",
+            "typechecking": "Проверка типов",
             "interrupt-running-code": "Прервать выполнение",
             "force-serial-poly": "Использовать WebUSB вместо WebSerial",
             "expand-minify-json": "Автоматическое минимизирование JSON",

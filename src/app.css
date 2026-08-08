@@ -596,6 +596,41 @@ body.loaded {
     line-height: 1.2em;
 }
 
+#menu-settings-list .typecheck-select {
+    text-align: right;
+    text-align-last: right;
+}
+
+#typecheck-stub-package {
+    width: 100%;
+    margin-top: 5px;
+}
+
+#menu-settings-list .typecheck-stub-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 5px;
+}
+
+#menu-settings-list .typecheck-stub-actions button {
+    padding: 3px 8px;
+    border: 1px solid #cccccc88;
+    border-radius: 2px;
+    background: var(--bg-color-edit);
+    font-size: 0.9rem;
+    line-height: 1.2;
+}
+
+#menu-settings-list .typecheck-stub-actions button:not(:disabled):hover {
+    border-color: var(--accent-color);
+    color: var(--fg-color-highlight);
+}
+
+#typecheck-stub-status {
+    font-size: 0.85rem;
+    opacity: 0.8;
+}
+
 /* About */
 
 .about-header {

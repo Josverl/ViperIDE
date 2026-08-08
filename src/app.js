@@ -2470,6 +2470,7 @@ export function applyTranslation() {
         QS('#menu-line-conn').innerText = T('settings.conn')
         QS('#menu-line-editor').innerText = T('settings.editor')
         QS('#menu-line-other').innerText = T('settings.other')
+        QS('#menu-line-typechecking').innerText = T('settings.typechecking')
 
         QS('label[for=interrupt-running-code]').innerText = T('settings.interrupt-running-code')
         QS('label[for=force-serial-poly]').innerText = T('settings.force-serial-poly')
@@ -2484,7 +2485,6 @@ export function applyTranslation() {
         QS('label[for=typecheck-scope]').innerText = T('settings.typecheck-scope')
         QS('label[for=typecheck-stubs]').innerText = T('settings.typecheck-stubs')
         QS('label[for=typecheck-stub-package]').innerText = T('settings.typecheck-stub-package')
-        QID('typecheck-stub-package-help').innerText = T('settings.typecheck-stub-package-help')
         QS('label[for=use-natural-sort]').innerText = T('settings.use-natural-sort')
 
         QS('label[for=lang]').innerText = T('settings.lang')

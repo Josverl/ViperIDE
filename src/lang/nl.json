@@ -31,6 +31,7 @@
             "conn": "verbinding",
             "editor": "editor",
             "other": "overige",
+            "typechecking": "Typecontrole",
             "interrupt-running-code": "Uitvoering onderbreken",
             "force-serial-poly": "WebUSB gebruiken in plaats van WebSerial",
             "expand-minify-json": "Automatische minimalisering van JSON",

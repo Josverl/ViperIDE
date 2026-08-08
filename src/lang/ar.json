@@ -31,6 +31,7 @@
             "conn": "الاتصال",
             "editor": "المحرر",
             "other": "أخرى",
+            "typechecking": "فحص الأنواع",
             "interrupt-running-code": "إيقاف التنفيذ",
             "force-serial-poly": "استخدام WebUSB بدلاً من WebSerial",
             "expand-minify-json": "التصغير التلقائي لـ JSON",

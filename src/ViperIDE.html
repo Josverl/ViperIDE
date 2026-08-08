@@ -113,43 +113,6 @@
                     <div><input type="checkbox" id="render-markdown" checked/><label for="render-markdown">Enable Markdown viewer</label></div>
                     <div><input type="checkbox" id="refresh-after-run" checked/><label for="refresh-after-run">Refresh files after run</label></div>
                     <div><input type="checkbox" id="auto-soft-reset" checked/><label for="auto-soft-reset">Soft-reset before run</label></div>
-                    <div><input type="checkbox" id="typecheck-enabled" checked/><label for="typecheck-enabled">Enable type checking</label></div>
-                    <div class="space-between">
-                        <label for="typecheck-mode">Type-check mode:</label>
-                        <select id="typecheck-mode">
-                            <option value="basic">Basic</option>
-                            <option value="standard" selected>Standard</option>
-                            <option value="strict">Strict</option>
-                        </select>
-                    </div>
-                    <div class="space-between">
-                        <label for="typecheck-scope">Type-check files:</label>
-                        <select id="typecheck-scope">
-                            <option value="openFilesOnly">Opened</option>
-                            <option value="workspace" selected>All</option>
-                        </select>
-                    </div>
-                    <div class="space-between">
-                        <label for="typecheck-stubs">Type stubs:</label>
-                        <select id="typecheck-stubs">
-                            <option value="auto" selected>Automatic</option>
-                            <option value="esp32">MP ESP32</option>
-                            <option value="rp2">MP RP2</option>
-                            <option value="stm32">MP STM32</option>
-                            <option value="samd">MP SAMD</option>
-                            <option value="webassembly">MP WebAssembly</option>
-                            <option value="circuitpython">CircuitPython</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label for="typecheck-stub-package">Install type stubs from PyPI:</label>
-                        <input id="typecheck-stub-package" list="typecheck-stub-catalog" placeholder="types-requests==2.32.4.20260107"/>
-                        <datalist id="typecheck-stub-catalog"></datalist>
-                        <button id="typecheck-stub-install" type="button">Install</button>
-                        <button id="typecheck-stub-clear" type="button">Clear cached</button>
-                        <div id="typecheck-stub-package-help">Choose a suggested MicroPython package or enter any type-only wheel from PyPI.</div>
-                        <div id="typecheck-stub-status" aria-live="polite">No cached stub packages.</div>
-                    </div>
                     <div class="title-lines" id="menu-line-pkg-mgr">package manager</div>
                     <div><input type="checkbox" id="install-package-source"/><label for="install-package-source">Prefer installing sources (.py)</label></div>
                     <div class="title-lines" id="menu-line-other">other</div>
@@ -199,6 +162,45 @@
                         </select>
                     </div>
                     <div><input type="checkbox" id="use-natural-sort" checked/><label for="use-natural-sort">Use natural sorting</label></div>
+                    <div class="title-lines" id="menu-line-typechecking">Typechecking</div>
+                    <div><input type="checkbox" id="typecheck-enabled" checked/><label for="typecheck-enabled">Enable type checking</label></div>
+                    <div class="space-between">
+                        <label for="typecheck-mode">Type-check mode:</label>
+                        <select class="typecheck-select" id="typecheck-mode">
+                            <option value="basic">Basic</option>
+                            <option value="standard" selected>Standard</option>
+                            <option value="strict">Strict</option>
+                        </select>
+                    </div>
+                    <div class="space-between">
+                        <label for="typecheck-scope">Type-check files:</label>
+                        <select class="typecheck-select" id="typecheck-scope">
+                            <option value="openFilesOnly">Opened</option>
+                            <option value="workspace" selected>All</option>
+                        </select>
+                    </div>
+                    <div class="space-between">
+                        <label for="typecheck-stubs">Type stubs:</label>
+                        <select class="typecheck-select" id="typecheck-stubs">
+                            <option value="auto" selected>Automatic</option>
+                            <option value="esp32">MP ESP32</option>
+                            <option value="rp2">MP RP2</option>
+                            <option value="stm32">MP STM32</option>
+                            <option value="samd">MP SAMD</option>
+                            <option value="webassembly">MP WebAssembly</option>
+                            <option value="circuitpython">CircuitPython</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="typecheck-stub-package">Install type stubs from PyPI:</label>
+                        <input id="typecheck-stub-package" list="typecheck-stub-catalog" placeholder="types-requests==2.32.4.20260107"/>
+                        <datalist id="typecheck-stub-catalog"></datalist>
+                        <span class="typecheck-stub-actions">
+                            <button id="typecheck-stub-install" type="button">Install</button>
+                            <button id="typecheck-stub-clear" type="button">Clear cached</button>
+                        </span>
+                        <div id="typecheck-stub-status" aria-live="polite">No cached stub packages.</div>
+                    </div>
                 </div>
             </div>
             <div id="menu-about" class="tab-content">

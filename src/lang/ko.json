@@ -31,6 +31,7 @@
             "conn": "연결",
             "editor": "편집기",
             "other": "기타",
+            "typechecking": "타입 검사",
             "interrupt-running-code": "실행 중단",
             "force-serial-poly": "WebSerial 대신 WebUSB 사용",
             "expand-minify-json": "JSON 자동 축소",

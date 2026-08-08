@@ -31,6 +31,7 @@
             "conn": "conexiune",
             "editor": "editor",
             "other": "alte",
+            "typechecking": "Verificarea tipurilor",
             "interrupt-running-code": "Întrerupe execuția",
             "force-serial-poly": "Utilizează WebUSB în loc de WebSerial",
             "expand-minify-json": "Minificarea automată a JSON",

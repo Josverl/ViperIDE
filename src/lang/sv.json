@@ -31,6 +31,7 @@
             "conn": "anslutning",
             "editor": "redaktör",
             "other": "andra",
+            "typechecking": "Typkontroll",
             "interrupt-running-code": "Avbryt körning",
             "force-serial-poly": "Använd WebUSB i stället för WebSerial",
             "expand-minify-json": "Automatisk minimisering av JSON",
