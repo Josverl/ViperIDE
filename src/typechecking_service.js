@@ -8,6 +8,50 @@
 const DIAGNOSTIC_DELAY_MS = 300
 const MICROPYTHON_STUB_TARGETS = new Set(['esp32', 'rp2', 'stm32', 'samd', 'webassembly'])
 
+/**
+ * @typedef {Object} TypecheckingServiceDependencies
+ * @property {(config: object) => Promise<{client: object, transport: object,
+ *   workspaceDiagnosticsSubscription?: {destroy: () => void}|null}>} createLSPClient
+ *   Factory used to start a worker-backed LSP client.
+ * @property {(client: object, editorView: object, options: object) => unknown[]} [createLSPPlugin]
+ *   Creates CodeMirror extensions for one document.
+ * @property {(editorView: object, extensions: unknown[]) => boolean} [configureEditor]
+ *   Installs extensions in a host-owned CodeMirror compartment and returns whether it succeeded.
+ * @property {(client: object, uri: string, content: string, version: number) => void}
+ *   [notifyDocumentChange]
+ * @property {(client: object, uri: string) => void} [notifyDocumentClose]
+ * @property {(current: {client: object, transport: object,
+ *   workspaceDiagnosticsSubscription?: {destroy: () => void}|null}, config: object) =>
+ *   Promise<{client: object, transport: object,
+ *   workspaceDiagnosticsSubscription?: {destroy: () => void}|null}>} [switchBoard]
+ * @property {(config: object) => Promise<object>} [prepareRuntime]
+ *   Resolves host configuration to a worker URL and selected stub bundle.
+ * @property {(url: string) => void} [revokeObjectURL] Worker Blob URL cleanup hook.
+ */
+
+/**
+ * @typedef {Object} TypecheckingSnapshot
+ * @property {'idle'|'starting'|'ready'|'switching'|'disabled'|'error'|'disposed'} status
+ * @property {Error|null} error - Current lifecycle error.
+ * @property {object|null} client - Active SimpleLSPClient.
+ * @property {object|null} transport - Active WorkerTransport.
+ * @property {object|null} selectedStubBundle - Selected manifest board entry.
+ * @property {string} typeCheckingMode - Effective Pyright checking mode.
+ * @property {string} diagnosticMode - Effective Pyright diagnostic scope.
+ * @property {Map<string, number>} documentVersions - Copy of open LSP document versions.
+ * @property {Map<string, object[]>} diagnosticStatus - Copy of diagnostics grouped by URI.
+ * @property {Map<string, string>} workspaceFiles - Copy of mirrored workspace files.
+ */
+
+/**
+ * Resolve the worker stub target from MicroPython or CircuitPython device metadata.
+ *
+ * `sys.platform` is authoritative for MicroPython. CircuitPython is detected from
+ * descriptive identity fields because it can share MCU platform names.
+ *
+ * @param {object} [devInfo={}] Device information.
+ * @returns {string|undefined} Stub bundle ID, or `undefined` when unsupported.
+ */
 export function stubTargetForDevice(devInfo = {}) {
   const platform = String(devInfo.platform || '').trim().toLowerCase()
   const identity = [
@@ -24,8 +68,18 @@ export function stubTargetForDevice(devInfo = {}) {
   return undefined
 }
 
-// Owns the application-wide LSP lifecycle and state independently of editor and device UI.
+/**
+ * Application-level adapter around the reusable LSP client.
+ *
+ * One instance owns one worker runtime, all CodeMirror bindings, the mirrored
+ * Python workspace, board switching, package-cache restarts, and status snapshots.
+ * The class contains no ViperIDE DOM dependencies; hosts inject editor and runtime hooks.
+ */
 export class TypecheckingService {
+  /**
+   * @param {TypecheckingServiceDependencies} dependencies Integration dependencies.
+   * @throws {TypeError} If `createLSPClient` is missing.
+   */
   constructor({
     createLSPClient,
     createLSPPlugin = null,
@@ -66,6 +120,16 @@ export class TypecheckingService {
     this.statusListeners = new Set()
   }
 
+  /**
+   * Start the worker and LSP handshake.
+   *
+   * Calls are coalesced while startup is in progress and return the current
+   * snapshot immediately when already ready.
+   *
+   * @param {object} config LSP configuration or input for `prepareRuntime`.
+   * @returns {Promise<TypecheckingSnapshot>} Ready service snapshot.
+   * @throws {Error} If runtime preparation, worker startup, or editor rebinding fails.
+   */
   initialize(config) {
     if (this.status === 'disposed') {
       return Promise.reject(new Error('TypecheckingService is disposed'))
@@ -129,6 +193,12 @@ export class TypecheckingService {
     return 1
   }
 
+  /**
+   * Set the host callback that installs LSP extensions into an editor.
+   *
+   * @param {(editorView: object, extensions: unknown[]) => boolean} configureEditor
+   * @returns {void}
+   */
   setEditorIntegration(configureEditor) {
     if (typeof configureEditor !== 'function') {
       throw new TypeError('TypecheckingService requires an editor configurator')
@@ -145,6 +215,16 @@ export class TypecheckingService {
     })
   }
 
+  /**
+   * Bind a CodeMirror editor to a workspace path.
+   *
+   * Binding may occur before initialization; the editor is opened when the
+   * runtime becomes ready.
+   *
+   * @param {object} editorView CodeMirror EditorView-compatible object.
+   * @param {string} path Workspace-relative Python path.
+   * @returns {Promise<string>} Encoded `file:///workspace/...` document URI.
+   */
   async bindEditor(editorView, path) {
     if (this.initializing) {
       await this.initializing
@@ -177,6 +257,13 @@ export class TypecheckingService {
     return uri
   }
 
+  /**
+   * Publish the complete current editor document to Pyright.
+   *
+   * @param {object} editorView Previously bound editor.
+   * @param {string} content Complete document text.
+   * @returns {boolean} Whether a ready binding was updated.
+   */
   changeEditor(editorView, content) {
     const binding = this.editorBindings.get(editorView)
     if (!binding || this.status !== 'ready') { return false }
@@ -186,6 +273,12 @@ export class TypecheckingService {
     return true
   }
 
+  /**
+   * Close a bound LSP document and remove its editor extensions.
+   *
+   * @param {object} editorView Previously bound editor.
+   * @returns {boolean} Whether a binding was removed.
+   */
   unbindEditor(editorView) {
     const binding = this.editorBindings.get(editorView)
     if (!binding) { return false }
@@ -199,6 +292,13 @@ export class TypecheckingService {
     return true
   }
 
+  /**
+   * Rename one file or directory throughout the mirrored workspace and open editors.
+   *
+   * @param {string} oldPath Existing workspace-relative path.
+   * @param {string} newPath Replacement workspace-relative path.
+   * @returns {void}
+   */
   renamePath(oldPath, newPath) {
     const canSync = this.status === 'ready'
     const oldTarget = this.workspacePath(oldPath)
@@ -243,6 +343,13 @@ export class TypecheckingService {
     }
   }
 
+  /**
+   * Remove a file or directory from the mirrored workspace.
+   *
+   * @param {string} path Workspace-relative path.
+   * @param {boolean} [recursive=false] Remove descendants for a directory path.
+   * @returns {void}
+   */
   removePath(path, recursive = false) {
     for (const [editorView, binding] of [...this.editorBindings]) {
       if (binding.path === path || (recursive && binding.path.startsWith(`${path}/`))) {
@@ -269,6 +376,12 @@ export class TypecheckingService {
     }
   }
 
+  /**
+   * Merge Python files into the mirrored workspace.
+   *
+   * @param {Record<string, string>} files Workspace-relative file contents.
+   * @returns {number} Number of files whose content changed.
+   */
   hydrateWorkspace(files) {
     let hydrated = 0
     for (const [path, content] of Object.entries(files || {})) {
@@ -279,6 +392,16 @@ export class TypecheckingService {
     return hydrated
   }
 
+  /**
+   * Reconcile the mirrored workspace to a complete Python-file snapshot.
+   *
+   * Open editor buffers override supplied content. Preserved paths survive an
+   * incomplete device read.
+   *
+   * @param {Record<string, string>} files Complete workspace snapshot.
+   * @param {{preservePaths?: string[]}} [options={}] Reconciliation options.
+   * @returns {{synced: number, deleted: number, total: number}} Reconciliation counts.
+   */
   replaceWorkspace(files, { preservePaths = [] } = {}) {
     const nextFiles = new Map()
     const preservedWorkspacePaths = new Set(
@@ -339,11 +462,25 @@ export class TypecheckingService {
     })
   }
 
+  /**
+   * Select stubs inferred from connected-device metadata.
+   *
+   * @param {object} devInfo Device information.
+   * @returns {Promise<boolean>} Whether the active stub bundle changed.
+   */
   async selectDevice(devInfo) {
     const boardId = stubTargetForDevice(devInfo)
     return boardId ? this.selectStubBundle(boardId) : false
   }
 
+  /**
+   * Restart Pyright with a manifest stub bundle.
+   *
+   * Existing editor buffers and mirrored files are rebound to the replacement runtime.
+   *
+   * @param {string} boardId Manifest board ID.
+   * @returns {Promise<boolean>} `false` when already selected, otherwise `true`.
+   */
   async selectStubBundle(boardId) {
     if (this.initializing) { await this.initializing }
     if (typeof boardId !== 'string' || !boardId.trim()) {
@@ -424,14 +561,32 @@ export class TypecheckingService {
     }
   }
 
+  /**
+   * Query catalog packages and current PyPI releases.
+   *
+   * Read-only queries wait for and retry across an in-progress runtime replacement.
+   *
+   * @returns {Promise<object[]>} Worker package catalog.
+   */
   listStubPackages() {
     return this.runStubPackageQuery(transport => transport.listStubPackages())
   }
 
+  /**
+   * List stub packages persisted by the worker.
+   *
+   * @returns {Promise<object[]>} Installed package metadata.
+   */
   listInstalledStubPackages() {
     return this.runStubPackageQuery(transport => transport.listInstalledStubPackages())
   }
 
+  /**
+   * Replace the runtime while preserving service configuration and editor bindings.
+   *
+   * @param {object} [configOverrides={}] Configuration overrides.
+   * @returns {Promise<TypecheckingSnapshot>} Ready replacement snapshot.
+   */
   async restartRuntime(configOverrides = {}) {
     if (this.restarting) { return this.restarting }
     const config = { ...this.clientConfig, ...configOverrides }
@@ -447,6 +602,13 @@ export class TypecheckingService {
     }
   }
 
+  /**
+   * Install a PyPI stub wheel and automatically restart Pyright.
+   *
+   * @param {string} packageName PyPI package name.
+   * @param {string} [versionSpecifier=''] Optional version constraint.
+   * @returns {Promise<object>} Installed package metadata.
+   */
   async installStubPackage(packageName, versionSpecifier = '') {
     const installed = await this.requireStubPackageTransport().
       installStubPackage(packageName, versionSpecifier)
@@ -454,6 +616,13 @@ export class TypecheckingService {
     return installed
   }
 
+  /**
+   * Clear cached stubs and restart Pyright when required.
+   *
+   * @param {string} [packageName] Package to clear, or omit for all packages.
+   * @param {string} [version] Exact version to clear.
+   * @returns {Promise<{removed: number, restartRequired: boolean}>} Clear result.
+   */
   async clearStubPackages(packageName, version) {
     const result = await this.requireStubPackageTransport().
       clearStubPackages(packageName, version)
@@ -483,6 +652,11 @@ export class TypecheckingService {
     }
   }
 
+  /**
+   * Stop type checking without discarding registered editor bindings or workspace files.
+   *
+   * @returns {boolean} Whether the service transitioned to disabled.
+   */
   disable() {
     if (this.status === 'disabled') { return false }
     if (this.status === 'starting' || this.status === 'switching') {
@@ -503,6 +677,14 @@ export class TypecheckingService {
     return true
   }
 
+  /**
+   * Subscribe to lifecycle, diagnostics, and workspace snapshots.
+   *
+   * The listener is invoked immediately.
+   *
+   * @param {(snapshot: TypecheckingSnapshot) => void} listener Status listener.
+   * @returns {() => boolean} Unsubscribe callback.
+   */
   onStatusChange(listener) {
     if (typeof listener !== 'function') {
       throw new TypeError('TypecheckingService status listener must be a function')
@@ -584,6 +766,14 @@ export class TypecheckingService {
     this.emitStatus()
   }
 
+  /**
+   * Return current service state with detached map containers.
+   *
+   * Diagnostic objects and clients remain shared references and must be treated
+   * as read-only by status consumers.
+   *
+   * @returns {TypecheckingSnapshot} Current state snapshot.
+   */
   snapshot() {
     // Return new maps so status consumers cannot mutate service-owned state.
     return {
@@ -600,6 +790,14 @@ export class TypecheckingService {
     }
   }
 
+  /**
+   * Permanently close the service and release worker-owned resources and listeners.
+   *
+   * Hosts should unbind or destroy editors first when their CodeMirror
+   * compartments also need to be cleared.
+   *
+   * @returns {void}
+   */
   dispose() {
     if (this.status === 'disposed') { return }
     this.generation++

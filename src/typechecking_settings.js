@@ -29,24 +29,33 @@ const TYPECHECKING_BOARDS = new Set([
     'circuitpython',
 ])
 
+/** @param {string} value @returns {'basic'|'standard'|'strict'} */
 export function normalizeTypecheckingMode(value) {
     return TYPECHECKING_MODES.has(value) ? value : DEFAULT_TYPECHECKING_MODE
 }
 
+/** @param {string} value @returns {'openFilesOnly'|'workspace'} */
 export function normalizeTypecheckingScope(value) {
     return TYPECHECKING_SCOPES.has(value) ? value : DEFAULT_TYPECHECKING_SCOPE
 }
 
+/** @param {string} value @returns {string} Supported board ID or `auto`. */
 export function normalizeTypecheckingBoard(value) {
     return TYPECHECKING_BOARDS.has(value) ? value : AUTO_TYPECHECKING_BOARD
 }
 
+/**
+ * @param {string} value Configured board ID.
+ * @param {object} [devInfo] Connected-device metadata used for automatic selection.
+ * @returns {string|undefined} Effective board ID.
+ */
 export function resolveTypecheckingBoard(value, devInfo) {
     const board = normalizeTypecheckingBoard(value)
     if (board !== AUTO_TYPECHECKING_BOARD) { return board }
     return devInfo ? stubTargetForDevice(devInfo) : undefined
 }
 
+/** @param {unknown} version Package version. @returns {string} Compact display version. */
 export function simpleStubVersion(version) {
     if (typeof version !== 'string' || !version.trim()) { return '' }
     return `v${version.trim().replace(/\.post\d+.*$/, '')}`
@@ -56,6 +65,13 @@ function normalizePackageName(value) {
     return String(value || '').trim().toLowerCase().replace(/[-_.]+/g, '-')
 }
 
+/**
+ * Parse a PyPI distribution plus an optional version constraint.
+ *
+ * @param {unknown} value User-entered package specifier.
+ * @returns {{packageName: string, versionSpecifier: string}} Normalized request.
+ * @throws {Error} If the package or constraint syntax is invalid.
+ */
 export function parseStubPackageSpecifier(value) {
     const match = /^([A-Za-z0-9][A-Za-z0-9._-]*)(.*)$/.exec(String(value || '').trim())
     if (!match) { throw new Error('Invalid package specifier') }
@@ -69,6 +85,13 @@ export function parseStubPackageSpecifier(value) {
     }
 }
 
+/**
+ * Build board selector options from the manifest and active cached packages.
+ *
+ * @param {{boards?: object[]}} manifest Worker stub manifest.
+ * @param {object[]} [installedPackages=[]] Cached package metadata.
+ * @returns {{id: string, label: string}[]} Supported board options.
+ */
 export function typecheckingBoardOptions(manifest, installedPackages = []) {
     const installedVersions = new Map(
         installedPackages.
@@ -87,6 +110,12 @@ export function typecheckingBoardOptions(manifest, installedPackages = []) {
         })
 }
 
+/**
+ * Convert persisted ViperIDE settings to reusable LSP client configuration.
+ *
+ * @param {object} settings Runtime settings.
+ * @returns {{extraPaths: string[], diagnosticMode: string, typeCheckingMode: string, boardId?: string}}
+ */
 export function typecheckingRuntimeConfig({ mode, scope, board, devInfo, extraPaths = [] }) {
     const boardId = resolveTypecheckingBoard(board, devInfo)
     return {

@@ -15,7 +15,7 @@ import {
 import { TypecheckingService } from './typechecking_service.js'
 import { typecheckingAssets } from './typechecking_assets.js'
 
-// One service instance owns the worker and all editor bindings for this application session.
+/** One service instance owns the worker and all editor bindings for this application session. */
 export const typechecking = new TypecheckingService({
   createLSPClient,
   createLSPPlugin,
@@ -30,4 +30,5 @@ export const typechecking = new TypecheckingService({
   },
 })
 
+/** @returns {Promise<{default: string, boards: object[]}>} Published worker stub manifest. */
 export const loadTypecheckingStubManifest = () => typecheckingAssets.loadManifest()

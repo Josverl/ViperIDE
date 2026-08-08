@@ -8,8 +8,17 @@ const CDN_ROOT = `https://cdn.jsdelivr.net/gh/Josverl/stubs_playground@${WORKER_
 const WORKER_URL = `${CDN_ROOT}packages/pyright-worker/dist/pyright_worker.js`
 const ASSETS_BASE = `${CDN_ROOT}packages/pyright-worker/assets`
 
-// Loads immutable worker assets and creates the same-origin Blob shim required by Worker.
+/**
+ * Load immutable worker metadata and create the same-origin Blob shim required
+ * to start a cross-origin CDN worker.
+ */
 export class TypecheckingAssets {
+  /**
+   * @param {object} [dependencies={}] Browser API overrides for tests or custom hosts.
+   * @param {typeof fetch} [dependencies.fetch] Fetch implementation.
+   * @param {typeof Blob} [dependencies.Blob] Blob constructor.
+   * @param {(blob: Blob) => string} [dependencies.createObjectURL] Object URL factory.
+   */
   constructor({
     // Browser fetch implementations may require their global object as the receiver.
     fetch: fetchAsset = globalThis.fetch?.bind(globalThis),
@@ -26,6 +35,12 @@ export class TypecheckingAssets {
     this.workerBlobUrl = null
   }
 
+  /**
+   * Resolve a board ID to the reusable client's runtime configuration.
+   *
+   * @param {string|{boardId?: string}} [config={}] Requested board or configuration.
+   * @returns {Promise<object>} Worker URL, board package/fallback, and manifest entry.
+   */
   async prepare(config = {}) {
     const manifest = await this.loadManifest()
     const boardId = typeof config === 'string' ? config : config.boardId
@@ -52,6 +67,13 @@ export class TypecheckingAssets {
     }
   }
 
+  /**
+   * Load and memoize the worker stub manifest.
+   *
+   * Failed loads are not cached and may be retried.
+   *
+   * @returns {Promise<{default: string, boards: object[]}>} Stub manifest.
+   */
   loadManifest() {
     if (!this.manifestPromise) {
       this.manifestPromise = this.fetchAsset(`${ASSETS_BASE}/stubs-manifest.json`).
@@ -79,6 +101,11 @@ export class TypecheckingAssets {
     return response
   }
 
+  /**
+   * Return one memoized same-origin Blob URL that imports the immutable CDN worker.
+   *
+   * @returns {string} Worker Blob URL.
+   */
   getWorkerBlobUrl() {
     if (!this.workerBlobUrl) {
       const shim = `importScripts(${JSON.stringify(WORKER_URL)});`
@@ -88,6 +115,14 @@ export class TypecheckingAssets {
     return this.workerBlobUrl
   }
 
+  /**
+   * Forget a released URL so a later initialization creates a fresh Blob URL.
+   *
+   * The caller remains responsible for calling `URL.revokeObjectURL`.
+   *
+   * @param {string} url Released object URL.
+   * @returns {void}
+   */
   releaseWorkerBlobUrl(url) {
     if (this.workerBlobUrl === url) {
       this.workerBlobUrl = null
