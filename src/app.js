@@ -21,7 +21,8 @@ import { WebLinksAddon } from '@xterm/addon-web-links'
 import { FitAddon } from '@xterm/addon-fit'
 
 import { isStandalonePWA } from 'is-standalone-pwa';
-import { addUpdateHandler, createNewEditor, getEditorFromElement } from './editor.js'
+import { addUpdateHandler, configureTypechecking, createNewEditor, getEditorDiagnostics,
+         getEditorFromElement, goToDocumentPosition, supportsTypechecking } from './editor.js'
 import { displayOpenFile, createTab, getTabFileName, getTabEditorElement } from './editor_tabs.js'
 import { serial as webSerialPolyfill } from 'web-serial-polyfill'
 import { WebSerial, WebBluetooth, WebSocketREPL, WebRTCTransport } from './transports/index.js'
@@ -33,6 +34,13 @@ import translations from '../build/translations.json'
 import { parseStackTrace, validatePython, disassembleMPY, minifyPython, prettifyPython, compilePython } from './python_utils.js'
 import { createBrowserVM, SYSTEM_DIRS } from './emulator.js'
 import { getSetting, onSettingChange, updateSetting } from './settings.js'
+import {
+    normalizeTypecheckingBoard,
+    parseStubPackageSpecifier,
+    resolveTypecheckingBoard,
+    typecheckingBoardOptions,
+    typecheckingRuntimeConfig,
+} from './typechecking_settings.js'
 import { renderMarkdown } from './markdown.js'
 
 import { UAParser } from 'ua-parser-js'
@@ -48,13 +56,26 @@ import * as fsCache from './fs_cache.js'
 import { createZipSync } from './zip.js'
 
 import { initControlClient } from './control_client.js'
+import { loadTypecheckingStubManifest, typechecking } from './typechecking.js'
+import { collectDiagnosticEntries, renderTypecheckingStatus } from './typechecking_status.js'
+import {
+    shouldMirrorDevicePythonWorkspace,
+    syncDevicePythonWorkspace,
+} from './typechecking_workspace.js'
+import {
+    diagnosticsPanelPresentation,
+    normalizeDiagnosticsFilters,
+    renderDiagnosticsPanel,
+} from './diagnostics_panel.js'
+
+typechecking.setEditorIntegration(configureTypechecking)
 
 import { library, dom } from '@fortawesome/fontawesome-svg-core'
 import { faUsb, faBluetoothB } from '@fortawesome/free-brands-svg-icons'
 import { faLink, faBars, faDownload, faCirclePlay, faCircleStop, faFolder, faFile, faFileCircleExclamation, faCubes, faGear,
          faCube, faTools, faSliders, faCircleInfo, faStar, faExpand, faCertificate,
          faPlug, faArrowUpRightFromSquare, faTerminal, faBug, faGaugeHigh,
-         faTrashCan, faArrowsRotate, faPowerOff, faPlus, faXmark,
+         faTrashCan, faArrowsRotate, faPowerOff, faPlus, faSquareCheck, faXmark,
          faFolderOpen
        } from '@fortawesome/free-solid-svg-icons'
 import { faMessage, faCircleDown } from '@fortawesome/free-regular-svg-icons'
@@ -63,7 +84,7 @@ library.add(faUsb, faBluetoothB)
 library.add(faLink, faBars, faDownload, faCirclePlay, faCircleStop, faFolder, faFile, faFileCircleExclamation, faCubes, faGear,
          faCube, faTools, faSliders, faCircleInfo, faStar, faExpand, faCertificate,
          faPlug, faArrowUpRightFromSquare, faTerminal, faBug, faGaugeHigh,
-         faTrashCan, faArrowsRotate, faPowerOff, faPlus, faXmark,
+         faTrashCan, faArrowsRotate, faPowerOff, faPlus, faSquareCheck, faXmark,
          faFolderOpen)
 library.add(faMessage, faCircleDown)
 dom.watch()
@@ -116,6 +137,9 @@ let reconnectToken = 0
 /* True while the user is letting the device go, so the disconnect callback that
    the teardown itself triggers is not mistaken for the device dropping out */
 let intentionalDisconnect = false
+const typecheckingExtraPaths = ['/workspace/lib']
+let typecheckingAction = Promise.resolve()
+let diagnosticsFilters = normalizeDiagnosticsFilters()
 
 const isBusyState = () => deviceState === 'busy-initial' || deviceState === 'busy-running'
 const portReady = () => !!port && deviceState === 'ready'
@@ -171,6 +195,210 @@ function setDeviceState(newState) {
     }
 
     replMonitor.setWatchPrompt(isBusyState())
+}
+
+function updateTypecheckingUI(snapshot = typechecking.snapshot()) {
+    const packageControlsEnabled = getSetting('typecheck-enabled') && snapshot.status === 'ready'
+    renderTypecheckingStatus(
+        QID('typecheck-tab'),
+        QID('typecheck-enabled'),
+        snapshot,
+        getSetting('typecheck-enabled'),
+    )
+    QID('typecheck-stub-package').disabled = !packageControlsEnabled
+    QID('typecheck-stub-install').disabled = !packageControlsEnabled
+    QID('typecheck-stub-clear').disabled = !packageControlsEnabled
+    if (!getSetting('typecheck-enabled')) {
+        setTypecheckingStubStatus('Enable type checking to view or manage cached stub packages.')
+    }
+    updateDiagnosticsPanel()
+}
+
+function openEditorDiagnostics() {
+    const editors = new Map()
+    for (const editorElement of QSA('.editor-tab-pane .editor')) {
+        const view = getEditorFromElement(editorElement)
+        const path = getTabFileName(editorElement)
+        if (view && path) {
+            editors.set(path, { path, diagnostics: getEditorDiagnostics(view) })
+        }
+    }
+    const openPaths = new Set(editors.keys())
+    for (const diagnostic of collectDiagnosticEntries(typechecking.snapshot().diagnosticStatus)) {
+        const encodedPath = diagnostic.fileName ||
+            diagnostic.uri?.replace(/^file:\/\/\/workspace\//, '')
+        if (!encodedPath) { continue }
+        const path = '/' + encodedPath.split('/').map(decodeURIComponent).join('/')
+        // Open editors own their live lint state; the workspace cache fills unopened files only.
+        if (openPaths.has(path)) { continue }
+        if (!editors.has(path)) {
+            editors.set(path, { path, diagnostics: [] })
+        }
+        editors.get(path).diagnostics.push(diagnostic)
+    }
+    return [...editors.values()]
+}
+
+function updateDiagnosticsPanel() {
+    const presentation = diagnosticsPanelPresentation(openEditorDiagnostics(), diagnosticsFilters)
+    renderDiagnosticsPanel({
+        badgeEl: QID('diagnostics-badge'),
+        fileSelectEl: QID('diagnostics-file'),
+        listEl: QID('diagnostics-list'),
+    }, presentation, diagnosticsFilters)
+}
+
+function showBottomPanel(target, focus = false) {
+    QS(`#terminal-tabs .tab[data-target="${target}"]`)?.click()
+    if (target === 'xterm' && focus) { term?.focus() }
+}
+
+async function jumpToDiagnostic(path, line, character) {
+    if (!displayOpenFile(path)) {
+        if (!portReady()) {
+            throw new Error(`Reconnect the device to open: ${path}`)
+        }
+        // Read through the normal device path so an old type-check snapshot can
+        // never create an editable tab that overwrites newer device content.
+        await fileClick(path)
+    }
+    const editorElement = getTabEditorElement(path)
+    const view = editorElement && getEditorFromElement(editorElement)
+    if (view) { goToDocumentPosition(view, line, character) }
+}
+
+async function updateTypecheckingBoardOptions(installedPackages = []) {
+    const select = QID('typecheck-stubs')
+    const manifest = await loadTypecheckingStubManifest()
+    const selected = normalizeTypecheckingBoard(getSetting('typecheck-stubs'))
+    select.replaceChildren(new Option('Automatic', 'auto'))
+    for (const board of typecheckingBoardOptions(manifest, installedPackages)) {
+        select.add(new Option(board.label, board.id))
+    }
+    select.value = selected
+}
+
+function setTypecheckingStubStatus(message) {
+    QID('typecheck-stub-status').textContent = message
+}
+
+async function refreshTypecheckingStubPackages() {
+    const [catalog, installed] = await Promise.all([
+        typechecking.listStubPackages(),
+        typechecking.listInstalledStubPackages(),
+    ])
+    const dataList = QID('typecheck-stub-catalog')
+    dataList.replaceChildren()
+    for (const stubPackage of catalog) {
+        for (const release of stubPackage.versions || []) {
+            const option = new Option(
+                `${stubPackage.packageName}==${release.version}`,
+                `${stubPackage.packageName}==${release.version}`,
+            )
+            option.label = stubPackage.label
+            dataList.appendChild(option)
+        }
+    }
+    await updateTypecheckingBoardOptions(installed)
+    const active = installed.filter(entry => entry.active)
+    setTypecheckingStubStatus(active.length
+        ? `Cached: ${active.map(entry => `${entry.packageName}@${entry.version}`).join(', ')}`
+        : 'No cached stub packages.')
+}
+
+async function installTypecheckingStubPackage() {
+    const input = QID('typecheck-stub-package')
+    const installButton = QID('typecheck-stub-install')
+    const specifier = parseStubPackageSpecifier(input.value)
+    installButton.disabled = true
+    setTypecheckingStubStatus(`Installing ${specifier.packageName}...`)
+    try {
+        const installed = await typechecking.installStubPackage(
+            specifier.packageName,
+            specifier.versionSpecifier,
+        )
+        input.value = ''
+        await refreshTypecheckingStubPackages()
+        setTypecheckingStubStatus(`Installed ${installed.packageName}@${installed.version}`)
+    } finally {
+        updateTypecheckingUI()
+    }
+}
+
+async function clearTypecheckingStubPackages() {
+    const clearButton = QID('typecheck-stub-clear')
+    clearButton.disabled = true
+    setTypecheckingStubStatus('Clearing cached stub packages...')
+    try {
+        await typechecking.clearStubPackages()
+        await refreshTypecheckingStubPackages()
+    } finally {
+        updateTypecheckingUI()
+    }
+}
+
+async function applyTypecheckingSetting(enabled) {
+    if (!enabled) {
+        typechecking.disable()
+        return
+    }
+
+    await typechecking.initialize(currentTypecheckingConfig())
+    await syncConnectedTypecheckingWorkspace()
+    void refreshTypecheckingStubPackages().
+        catch(err => report('Unable to load current type-stub packages', err))
+}
+
+function currentTypecheckingConfig() {
+    return typecheckingRuntimeConfig({
+        mode: getSetting('typecheck-mode'),
+        scope: getSetting('typecheck-scope'),
+        board: getSetting('typecheck-stubs'),
+        devInfo,
+        extraPaths: typecheckingExtraPaths,
+    })
+}
+
+function queueTypecheckingSetting(enabled) {
+    typecheckingAction = typecheckingAction.
+        then(() => applyTypecheckingSetting(enabled)).
+        catch(err => report(enabled ? 'Unable to start type checking' : 'Unable to disable type checking', err))
+    return typecheckingAction
+}
+
+function queueTypecheckingDeviceSelection() {
+    typecheckingAction = typecheckingAction.
+        then(() => {
+            if (!getSetting('typecheck-enabled')) { return }
+            const boardId = resolveTypecheckingBoard(getSetting('typecheck-stubs'), devInfo)
+            if (!boardId) { return }
+            return typechecking.selectStubBundle(boardId)
+        }).
+        catch(err => report('Unable to select type-checking stubs', err))
+    return typecheckingAction
+}
+
+function queueTypecheckingReconfiguration({ syncWorkspace = false } = {}) {
+    typecheckingAction = typecheckingAction.
+        then(async () => {
+            if (!getSetting('typecheck-enabled')) { return }
+            const status = typechecking.snapshot().status
+            if (status !== 'idle' && status !== 'disabled') {
+                await typechecking.restartRuntime(currentTypecheckingConfig())
+            } else {
+                await typechecking.initialize(currentTypecheckingConfig())
+            }
+            if (syncWorkspace) {
+                await syncConnectedTypecheckingWorkspace()
+            }
+        }).
+        catch(err => report('Unable to apply type-checking settings', err))
+    return typecheckingAction
+}
+
+export function toggleTypechecking() {
+    const current = getSetting('typecheck-enabled')
+    updateSetting('typecheck-enabled', !current)
 }
 
 function setRunMode(on) {
@@ -1214,7 +1442,38 @@ async function _raw_updateFileTree(raw) {
 
     await _raw_reconcileOpenTabs(raw, delta)
     await _raw_restoreDrafts(raw)
+    await _raw_syncTypecheckingWorkspace(raw)
     return delta
+}
+
+async function _raw_syncTypecheckingWorkspace(raw) {
+    const workspace = await syncDevicePythonWorkspace({
+        enabled: getSetting('typecheck-enabled'),
+        scope: getSetting('typecheck-scope'),
+        raw,
+        fsCache,
+        isSpecialPath,
+        replaceWorkspace: (files, options) => typechecking.replaceWorkspace(files, options),
+    })
+    for (const { path, error } of workspace.errors) {
+        console.warn(`Unable to mirror ${path} for type checking`, error)
+    }
+    return workspace.mirrored
+}
+
+async function syncConnectedTypecheckingWorkspace() {
+    if (!portReady() || !shouldMirrorDevicePythonWorkspace(
+        getSetting('typecheck-enabled'),
+        getSetting('typecheck-scope'),
+    )) {
+        return false
+    }
+    const raw = await MpRawMode.begin(port)
+    try {
+        return await _raw_syncTypecheckingWorkspace(raw)
+    } finally {
+        try { await raw.end() } catch (_err) { /* device may have disconnected */ }
+    }
 }
 
 /*
@@ -1627,26 +1886,36 @@ async function _loadContent(fn, content, editorElement, { external=null } = {}) 
         }
 
         editorElement.innerHTML = '' // Clear existing content
-        editor = await createNewEditor(editorElement, fn, content, {
+        const loadedEditor = await createNewEditor(editorElement, fn, content, {
             wordWrap: getSetting('use-word-wrap'),
             devInfo,
             readOnly,
         })
+        if (editorElement.closest('.editor-tab-pane')?.classList.contains('active')) {
+            editor = loadedEditor
+            editorFn = fn
+        }
         /* The text as handed to the editor, which is not the bytes on the device
            for prettified JSON or a disassembly. Comparing against this is what
            makes an undo clear the marker again. */
         fsCache.openView(tabFn, { baseline: content, kind: 'text', readOnly })
-        document.dispatchEvent(new CustomEvent("editorLoaded", {detail: {editor: editor, fn: fn}}))
+        document.dispatchEvent(new CustomEvent("editorLoaded", {
+            detail: { editor: loadedEditor, fn },
+        }))
 
         const scheduleSync = makeCoalesced(1000)
-        addUpdateHandler(editor, (update) => {
+        addUpdateHandler(loadedEditor, (update) => {
+            updateDiagnosticsPanel()
             if (!update.docChanged) return
             // The tab knows the current name; this one goes stale on a move
             const key = getTabFileName(editorElement) || tabFn
-            scheduleSync(() => setDirty(key, fsCache.setDraft(key, update.state.doc.toString())))
+            const text = update.state.doc.toString()
+            // Keep completion and hover synchronized while draft persistence remains coalesced.
+            typechecking.changeEditor(loadedEditor, text)
+            scheduleSync(() => {
+                setDirty(key, fsCache.setDraft(key, text))
+            })
         })
-
-        editorFn = fn
     }
     autoHideSideMenu()
 }
@@ -1781,6 +2050,7 @@ export async function reboot(mode = 'hard') {
 }
 
 export async function runCurrentFile() {
+    showBottomPanel('xterm', true)
     if (!port || deviceState === 'reconnecting') return;
 
     if (isInRunMode || isBusyState()) {
@@ -2200,6 +2470,7 @@ export function applyTranslation() {
         QS('#menu-line-conn').innerText = T('settings.conn')
         QS('#menu-line-editor').innerText = T('settings.editor')
         QS('#menu-line-other').innerText = T('settings.other')
+        QS('#menu-line-typechecking').innerText = T('settings.typechecking')
 
         QS('label[for=interrupt-running-code]').innerText = T('settings.interrupt-running-code')
         QS('label[for=force-serial-poly]').innerText = T('settings.force-serial-poly')
@@ -2209,6 +2480,11 @@ export function applyTranslation() {
         QS('label[for=render-markdown]').innerText = T('settings.render-markdown')
         QS('label[for=refresh-after-run]').innerText = T('settings.refresh-after-run')
         QS('label[for=auto-soft-reset]').innerText = T('settings.auto-soft-reset')
+        QS('label[for=typecheck-enabled]').innerText = T('settings.typecheck-enabled')
+        QS('label[for=typecheck-mode]').innerText = T('settings.typecheck-mode')
+        QS('label[for=typecheck-scope]').innerText = T('settings.typecheck-scope')
+        QS('label[for=typecheck-stubs]').innerText = T('settings.typecheck-stubs')
+        QS('label[for=typecheck-stub-package]').innerText = T('settings.typecheck-stub-package')
         QS('label[for=use-natural-sort]').innerText = T('settings.use-natural-sort')
 
         QS('label[for=lang]').innerText = T('settings.lang')
@@ -2357,12 +2633,52 @@ function showOfflineReadyToast(version) {
         term.options.fontSize = (size * 0.9).toFixed(1)
     })
 
+    typechecking.onStatusChange(updateTypecheckingUI)
+    updateTypecheckingBoardOptions().catch(err => report('Unable to load type-stub versions', err))
+    onSettingChange('typecheck-enabled', queueTypecheckingSetting)
+    onSettingChange('typecheck-mode', queueTypecheckingReconfiguration)
+    onSettingChange('typecheck-scope', () =>
+        queueTypecheckingReconfiguration({ syncWorkspace: true }))
+    onSettingChange('typecheck-stubs', queueTypecheckingReconfiguration)
+    QID('typecheck-stub-install').addEventListener('click', () => {
+        typecheckingAction = typecheckingAction.
+            then(installTypecheckingStubPackage).
+            catch(err => report('Unable to install type stubs', err))
+    })
+    QID('typecheck-stub-clear').addEventListener('click', () => {
+        typecheckingAction = typecheckingAction.
+            then(clearTypecheckingStubPackages).
+            catch(err => report('Unable to clear cached type stubs', err))
+    })
+    QID('typecheck-stub-package').addEventListener('keydown', event => {
+        if (event.key === 'Enter') { QID('typecheck-stub-install').click() }
+    })
+
     initLaunchHandler()
     applyTranslation()
 
 
     setupTabs(QID('side-menu'))
     setupTabs(QID('terminal-container'))
+    QID('diagnostics-file').addEventListener('change', event => {
+        diagnosticsFilters.file = event.target.value
+        updateDiagnosticsPanel()
+    })
+    QID('diagnostics-severities').addEventListener('change', () => {
+        diagnosticsFilters.severities = new Set(
+            QSA('#diagnostics-severities input:checked').map(input => input.value),
+        )
+        updateDiagnosticsPanel()
+    })
+    QID('diagnostics-list').addEventListener('click', event => {
+        const item = event.target.closest('.diagnostic-item')
+        if (!item) { return }
+        jumpToDiagnostic(
+            item.dataset.path,
+            Number(item.dataset.line),
+            Number(item.dataset.character),
+        ).catch(err => report('Unable to open diagnostic location', err))
+    })
 
     toastr.options.preventDuplicates = true;
 
@@ -2506,13 +2822,34 @@ function showOfflineReadyToast(version) {
         editorFn = event.detail.fn
         markFile(event.detail.fn, 'open', true)
     })
+    document.addEventListener("editorLoaded", (event) => {
+        if (!supportsTypechecking(event.detail.fn, event.detail.editor.state.readOnly)) { return }
+        typechecking.bindEditor(event.detail.editor, event.detail.fn).
+            catch(err => report('Unable to enable type checking for this file', err))
+    })
     document.addEventListener("tabClosed", (event) => {
+        const closedEditor = getEditorFromElement(event.detail.editorElement)
+        if (closedEditor) { typechecking.unbindEditor(closedEditor) }
         markFile(event.detail.fn, 'open', false)
         markFile(event.detail.fn, 'changed', false)
         markFile(event.detail.fn, 'conflict', false)
         /* Closing already asked about discarding unsaved changes, so the backup
            has to go with them */
         fsCache.closeView(event.detail.fn)
+        updateDiagnosticsPanel()
+    })
+    document.addEventListener("fileRenamed", event => {
+        typechecking.renamePath(event.detail.old, event.detail.new)
+        updateDiagnosticsPanel()
+    })
+    document.addEventListener("fileRemoved", event => {
+        typechecking.removePath(event.detail.path)
+    })
+    document.addEventListener("dirRemoved", event => {
+        typechecking.removePath(event.detail.path, true)
+    })
+    document.addEventListener("deviceConnected", () => {
+        queueTypecheckingDeviceSelection()
     })
     /* Closing the last tab would leave the editor area blank and `editor`
        pointing at a view that is no longer in the document */
@@ -2523,6 +2860,13 @@ function showOfflineReadyToast(version) {
     setTimeout(() => {
         document.body.classList.add('loaded')
     }, 100)
+
+    // Type checking is independent of device transport and remains alive across reconnects.
+    queueTypecheckingSetting(getSetting('typecheck-enabled'))
+    window.addEventListener('pagehide', event => {
+        // A bfcache page remains live and must retain its worker for restoration.
+        if (!event.persisted) { typechecking.dispose() }
+    })
 
     let urlID
     if ((urlID = urlParams.get('wss'))) {

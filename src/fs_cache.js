@@ -265,6 +265,9 @@ export function reconcileListing(fs_tree, isVirtual) {
 export function has(path) { return listing.has(path) }
 export function get(path) { return listing.get(path) || null }
 
+// Exposes names only; callers still use peek() so this never triggers device reads.
+export function knownPaths() { return [...listing.keys()] }
+
 export function sizeOf(path) {
     const entry = listing.get(path)
     return entry ? entry.size : null
