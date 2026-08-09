@@ -162,6 +162,45 @@
                         </select>
                     </div>
                     <div><input type="checkbox" id="use-natural-sort" checked/><label for="use-natural-sort">Use natural sorting</label></div>
+                    <div class="title-lines" id="menu-line-typechecking">Typechecking</div>
+                    <div><input type="checkbox" id="typecheck-enabled" checked/><label for="typecheck-enabled">Enable type checking</label></div>
+                    <div class="space-between">
+                        <label for="typecheck-mode">Type-check mode:</label>
+                        <select class="typecheck-select" id="typecheck-mode">
+                            <option value="basic">Basic</option>
+                            <option value="standard" selected>Standard</option>
+                            <option value="strict">Strict</option>
+                        </select>
+                    </div>
+                    <div class="space-between">
+                        <label for="typecheck-scope">Type-check files:</label>
+                        <select class="typecheck-select" id="typecheck-scope">
+                            <option value="openFilesOnly">Opened</option>
+                            <option value="workspace" selected>All</option>
+                        </select>
+                    </div>
+                    <div class="space-between">
+                        <label for="typecheck-stubs">Type stubs:</label>
+                        <select class="typecheck-select" id="typecheck-stubs">
+                            <option value="auto" selected>Automatic</option>
+                            <option value="esp32">MP ESP32</option>
+                            <option value="rp2">MP RP2</option>
+                            <option value="stm32">MP STM32</option>
+                            <option value="samd">MP SAMD</option>
+                            <option value="webassembly">MP WebAssembly</option>
+                            <option value="circuitpython">CircuitPython</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="typecheck-stub-package">Install type stubs from PyPI:</label>
+                        <input id="typecheck-stub-package" list="typecheck-stub-catalog" placeholder="types-requests==2.32.4.20260107"/>
+                        <datalist id="typecheck-stub-catalog"></datalist>
+                        <span class="typecheck-stub-actions">
+                            <button id="typecheck-stub-install" type="button">Install</button>
+                            <button id="typecheck-stub-clear" type="button">Clear cached</button>
+                        </span>
+                        <div id="typecheck-stub-status" aria-live="polite">No cached stub packages.</div>
+                    </div>
                 </div>
             </div>
             <div id="menu-about" class="tab-content">
@@ -197,7 +236,7 @@
                 <div class="tabs" id="terminal-tabs" onmousedown="app.initDrag(event)" ontouchstart="app.initDrag(event)">
                     <div>
                         <a class="tab active" data-target="xterm"><i class="fa-solid fa-terminal"></i> <span id="tab-term">Terminal</span></a>
-                        <!--a class="tab"        data-target="logs"><i class="fa-solid fa-bug"></i> IDE Logs</a-->
+                        <a class="tab" id="typecheck-tab" data-target="diagnostics"><i class="fa-solid fa-square-check"></i> Type check <span id="diagnostics-badge"></span></a>
                     </div>
                     <div>
                         <button title="Clear" onclick="app.clearTerminal()" id="term-clear"><i class="fa-solid fa-trash-can"></i></button>
@@ -209,8 +248,18 @@
                 <div id="xterm" class="tab-content active">
                     <!-- Xterm.js terminal content goes here -->
                 </div>
-                <div id="logs" class="tab-content">
-                    <!-- Logs content goes here -->
+                <div id="diagnostics" class="tab-content" role="tabpanel" aria-label="Type check diagnostics">
+                    <div id="diagnostics-controls">
+                        <label for="diagnostics-file">File</label>
+                        <select id="diagnostics-file"><option value="">All files</option></select>
+                        <fieldset id="diagnostics-severities">
+                            <legend>Severity</legend>
+                            <label><input type="checkbox" value="error" checked> Error</label>
+                            <label><input type="checkbox" value="warning" checked> Warning</label>
+                            <label><input type="checkbox" value="info" checked> Info</label>
+                        </fieldset>
+                    </div>
+                    <div id="diagnostics-list" aria-live="polite"></div>
                 </div>
             </div>
         </div>

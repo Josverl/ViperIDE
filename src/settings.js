@@ -92,6 +92,8 @@ function _loadSettings() {
         _setLoadedValue(element.id, loadedSettings[element.id], element.value, (value) => element.value = value)
     })
 
+    // Persist defaults for controls added after an existing settings record was created.
+    _persistSettings(loadedSettings)
     return loadedSettings
 }
 
