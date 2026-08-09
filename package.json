@@ -8,7 +8,9 @@
     "build": "rollup --config",
     "start": "rollup --config --configDebug --watch",
     "lint": "npx eslint",
-    "test": "npx mocha"
+    "test": "npx mocha && npm run test:unit && npm run test:build",
+    "test:unit": "npx mocha --no-config \"test/unit/**/*.js\"",
+    "test:build": "npx mocha --no-config \"test/rollup/**/*.js\""
   },
   "dependencies": {
     "@amplitude/analytics-browser": "^2.45.5",
