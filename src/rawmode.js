@@ -324,11 +324,13 @@ except: id=b''
 try: v=sys.version.split(';')[1].strip()
 except: v='MicroPython '+u[2]
 mpy=getattr(sys.implementation, '_mpy', 0)
+build=getattr(sys.implementation, '_build', '')
 sp=':'.join(sys.path)
-d=[u[4],id.hex(),u[2],u[0],v,(mpy>>10)&0x0F,mpy&0xFF,(mpy>>8)&3,sp]
+d=[u[4],id.hex(),u[2],u[0],v,sys.platform,build,(mpy>>10)&0x0F,mpy&0xFF,(mpy>>8)&3,sp]
 print('|'.join(str(x) for x in d))
 `)
-        let [machine, uid, release, sysname, version, mpy_arch, mpy_ver, mpy_sub, sys_path] = rsp.trim().split('|')
+        let [machine, uid, release, sysname, version, platform, build, mpy_arch, mpy_ver, mpy_sub,
+            sys_path] = rsp.trim().split('|')
         sys_path = sys_path.split(':')
         // See https://docs.micropython.org/en/latest/reference/mpyfiles.html
         try {
@@ -339,7 +341,10 @@ print('|'.join(str(x) for x in d))
         mpy_ver = parseInt(mpy_ver, 10)
         mpy_sub = parseInt(mpy_sub, 10)
         if (!mpy_ver) { mpy_ver = 'py' }
-        return { machine, uid, release, sysname, version, mpy_arch, mpy_ver, mpy_sub, sys_path }
+        return {
+            machine, uid, release, sysname, version, platform, build,
+            mpy_arch, mpy_ver, mpy_sub, sys_path,
+        }
     }
 
 

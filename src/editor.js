@@ -18,7 +18,7 @@ import { simpleMode } from '@codemirror/legacy-modes/mode/simple-mode'
 import { toml } from '@codemirror/legacy-modes/mode/toml'
 import { monokaiInit } from '@uiw/codemirror-theme-monokai'
 import { tags } from '@lezer/highlight'
-import { linter } from '@codemirror/lint'
+import { forEachDiagnostic, linter } from '@codemirror/lint'
 import { highlightSelectionMatches } from '@codemirror/search'
 
 import { validatePython, getRuffWorkspace } from './python_utils.js'
@@ -335,6 +335,7 @@ function ruffLinter(ruff) {
         to:   doc.line(d.end_location.row).from + d.end_location.column - 1,
         severity: (d.message.indexOf('Error:') >= 0) ? 'error' : 'warning',
         message: d.code ? d.code + ': ' + d.message : d.message,
+        source: 'Ruff',
       })
     }
     return diagnostics
@@ -402,9 +403,29 @@ const extraTheme = EditorView.theme({
  * Finally, the editor initialization
  */
 
+const lspCompartments = new WeakMap()
+
+/**
+ * Return whether a file can receive live Python language-server extensions.
+ */
+export function supportsTypechecking(fn, readOnly = false) {
+  return fn.endsWith('.py') && !readOnly
+}
+
+/**
+ * Reconfigure the private LSP compartment attached to an editable Python view.
+ */
+export function configureTypechecking(editorView, extensions) {
+  const compartment = lspCompartments.get(editorView)
+  if (!compartment) { return false }
+  editorView.dispatch({ effects: compartment.reconfigure(extensions) })
+  return true
+}
+
 export async function createNewEditor(editorElement, fn, content, options) {
     let mode = []
     let { wordWrap, readOnly } = options
+    const lspCompartment = supportsTypechecking(fn, readOnly) ? new Compartment() : null
     if (fn.endsWith('.py')) {
         const ruff = await getRuffWorkspace()
         mode = [
@@ -444,6 +465,10 @@ export async function createNewEditor(editorElement, fn, content, options) {
         mode.push(EditorState.readOnly.of(true))
         mode.push(EditorView.editable.of(false))
     }
+    if (lspCompartment) {
+      // Start empty; the service fills this after its worker handshake completes.
+      mode.push(lspCompartment.of([]))
+    }
 
     devInfo = options.devInfo
 
@@ -482,6 +507,9 @@ export async function createNewEditor(editorElement, fn, content, options) {
             ],
         })
     })
+        if (lspCompartment) {
+          lspCompartments.set(view, lspCompartment)
+        }
 
     return view
 }
@@ -504,4 +532,37 @@ export function getEditorFromElement(element) {
  */
 export function addUpdateHandler(editorView, callback) {
   editorView.dispatch({effects: StateEffect.appendConfig.of(EditorView.updateListener.of(callback))})
+}
+
+
+/**
+ * Move the caret to a 1-based line/character position and scroll it into view.
+ */
+export function goToDocumentPosition(view, line, character = 1) {
+  const doc = view.state.doc
+  const lineInfo = doc.line(Math.min(Math.max(line, 1), doc.lines))
+  const pos = Math.min(lineInfo.from + Math.max(character - 1, 0), lineInfo.to)
+  view.dispatch({
+    selection: EditorSelection.cursor(pos),
+    effects: EditorView.scrollIntoView(pos, { y: 'center' }),
+  })
+  view.focus()
+}
+
+/**
+ * Return every CodeMirror diagnostic currently attached to an editor.
+ */
+export function getEditorDiagnostics(view) {
+  const diagnostics = []
+  forEachDiagnostic(view.state, (diagnostic, from) => {
+    const line = view.state.doc.lineAt(from)
+    diagnostics.push({
+      line: line.number,
+      character: from - line.from + 1,
+      message: diagnostic.message,
+      severity: diagnostic.severity === 'hint' ? 'info' : diagnostic.severity,
+      source: diagnostic.source || '',
+    })
+  })
+  return diagnostics
 }
