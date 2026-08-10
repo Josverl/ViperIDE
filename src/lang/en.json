@@ -15,7 +15,8 @@
                 "ble": "Connect Bluetooth",
                 "usb": "Connect USB/Serial"
             },
-            "terminal": "Terminal"
+            "terminal": "Terminal",
+            "problems": "Problems"
         },
         "menu": {
             "package-mgr": "Package Manager",

@@ -2452,6 +2452,7 @@ export function applyTranslation() {
         QID('btn-conn-usb').setAttribute('title', T('tool.conn.usb'))
         QID('term-clear').setAttribute('title',   T('tool.clear'))
         QID('tab-term').innerText = T('tool.terminal')
+        QID('tab-problems').innerText = T('tool.problems')
 
         QSA('#app-expand, #term-expand').forEach(el => {
             el.setAttribute('title', T('tool.fullscreen'))

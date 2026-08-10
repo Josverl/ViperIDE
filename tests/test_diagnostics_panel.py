@@ -3,15 +3,11 @@ import re
 from playwright.sync_api import expect
 
 
-def test_diagnostics_panel_filters_jumps_and_run_returns_to_terminal(
-    page, viperide_server, tmp_path
-):
+def test_diagnostics_panel_filters_jumps_and_run_returns_to_terminal(page, viperide_server, tmp_path):
     console_errors = []
     page.on(
         "console",
-        lambda message: console_errors.append(message.text)
-        if message.type == "error"
-        else None,
+        lambda message: console_errors.append(message.text) if message.type == "error" else None,
     )
     page.on("dialog", lambda dialog: dialog.dismiss())
     page.goto(f"{viperide_server}/?vm=1", wait_until="domcontentloaded")
@@ -25,6 +21,7 @@ def test_diagnostics_panel_filters_jumps_and_run_returns_to_terminal(
     expect(typecheck_tab).to_have_attribute("data-state", "ready", timeout=90_000)
     expect(page.locator("#typechecking-status")).to_have_count(0)
     expect(typecheck_tab.locator("svg[data-icon=square-check]")).to_have_count(1)
+    expect(page.locator("#tab-problems")).to_have_text("Problems")
 
     editor.fill("import missing_module\n\nprint(undefined_name)\n")
     typecheck_tab.click()
@@ -46,14 +43,10 @@ def test_diagnostics_panel_filters_jumps_and_run_returns_to_terminal(
     first = rows.first
     expected_line = first.get_attribute("data-line")
     first.click()
-    expect(page.locator('#editor-tabs .tab.active')).to_have_attribute(
-        "data-fn", "/main.py"
-    )
+    expect(page.locator("#editor-tabs .tab.active")).to_have_attribute("data-fn", "/main.py")
     expect(page.locator(".cm-activeLine")).to_be_visible()
     assert expected_line is not None
-    assert page.locator(".cm-activeLine").inner_text() == editor.inner_text().splitlines()[
-        int(expected_line) - 1
-    ]
+    assert page.locator(".cm-activeLine").inner_text() == editor.inner_text().splitlines()[int(expected_line) - 1]
 
     page.screenshot(path=tmp_path / "diagnostics-panel.png")
 
@@ -64,9 +57,7 @@ def test_diagnostics_panel_filters_jumps_and_run_returns_to_terminal(
     assert console_errors == []
 
 
-def test_pyright_diagnostics_are_merged_with_host_linters(
-    page, viperide_server, tmp_path
-):
+def test_pyright_diagnostics_are_merged_with_host_linters(page, viperide_server, tmp_path):
     page.on("dialog", lambda dialog: dialog.dismiss())
     page.add_init_script(
         """
@@ -94,13 +85,9 @@ def test_pyright_diagnostics_are_merged_with_host_linters(
     )
     page.locator('[data-target="diagnostics"]').click()
 
-    pyright_rows = page.locator(".diagnostic-item").filter(
-        has=page.locator(".diagnostic-source", has_text="Pyright")
-    )
+    pyright_rows = page.locator(".diagnostic-item").filter(has=page.locator(".diagnostic-source", has_text="Pyright"))
     expect(pyright_rows).to_have_count(5, timeout=30_000)
-    ruff_rows = page.locator(".diagnostic-item").filter(
-        has=page.locator(".diagnostic-source", has_text="Ruff")
-    )
+    ruff_rows = page.locator(".diagnostic-item").filter(has=page.locator(".diagnostic-source", has_text="Ruff"))
     expect(ruff_rows).to_have_count(2)
 
     results = pyright_rows.evaluate_all(
@@ -117,14 +104,8 @@ def test_pyright_diagnostics_are_merged_with_host_linters(
     expect(badge).to_have_attribute("data-severity", "error")
     expect(badge).to_have_css("background-color", "rgb(255, 136, 119)")
     assert any('Import "rp2" could not be resolved' in result["message"] for result in results)
-    assert any(
-        'Import "idonotexist" could not be resolved' in result["message"]
-        for result in results
-    )
-    assert any(
-        'Type of "idonotexist" is "Module("idonotexist")"' in result["message"]
-        for result in results
-    )
+    assert any('Import "idonotexist" could not be resolved' in result["message"] for result in results)
+    assert any('Type of "idonotexist" is "Module("idonotexist")"' in result["message"] for result in results)
     expect(page.locator(".cm-lintRange-error")).to_have_count(2)
     expect(page.locator(".cm-lintRange-info")).to_have_count(1)
     expect(page.locator(".cm-lintPoint-error")).to_have_count(0)
@@ -168,25 +149,17 @@ def test_pyright_diagnostics_are_merged_with_host_linters(
     expect(badge).to_have_attribute("data-severity", "warning", timeout=30_000)
     expect(badge).to_have_css("background-color", "rgb(255, 238, 136)")
 
-    page.locator(".cm-content").fill(
-        "from typing_extensions import reveal_type\n"
-        "value = 1\n"
-        "reveal_type(value)\n"
-    )
+    page.locator(".cm-content").fill("from typing_extensions import reveal_type\nvalue = 1\nreveal_type(value)\n")
     expect(badge).to_have_attribute("data-severity", "info", timeout=30_000)
     expect(badge).to_have_css("background-color", "rgb(170, 170, 255)")
     page.screenshot(path=tmp_path / "diagnostics-panel-pyright.png")
 
 
-def test_typechecking_scope_includes_unopened_files_and_opens_them_from_diagnostics(
-    page, viperide_server, tmp_path
-):
+def test_typechecking_scope_includes_unopened_files_and_opens_them_from_diagnostics(page, viperide_server, tmp_path):
     console_errors = []
     page.on(
         "console",
-        lambda message: console_errors.append(message.text)
-        if message.type == "error"
-        else None,
+        lambda message: console_errors.append(message.text) if message.type == "error" else None,
     )
     page.add_init_script(
         """
@@ -203,22 +176,14 @@ def test_typechecking_scope_includes_unopened_files_and_opens_them_from_diagnost
 
     page.once("dialog", lambda dialog: dialog.accept("scope_unopened.py"))
     page.evaluate("app.createNewFile('/')")
-    expect(page.locator("#editor-tabs .tab.active")).to_have_attribute(
-        "data-fn", "/scope_unopened.py"
-    )
-    page.locator(".editor-tab-pane.active .cm-content").fill(
-        'workspace_value: int = "wrong"\n'
-    )
+    expect(page.locator("#editor-tabs .tab.active")).to_have_attribute("data-fn", "/scope_unopened.py")
+    page.locator(".editor-tab-pane.active .cm-content").fill('workspace_value: int = "wrong"\n')
     page.evaluate("app.saveCurrentFile()")
-    page.locator(
-        '#editor-tabs .tab[data-fn="/scope_unopened.py"] .menu-action'
-    ).click()
+    page.locator('#editor-tabs .tab[data-fn="/scope_unopened.py"] .menu-action').click()
     expect(page.locator('#editor-tabs .tab[data-fn="/scope_unopened.py"]')).to_have_count(0)
 
     page.locator('[data-target="diagnostics"]').click()
-    unopened_rows = page.locator(
-        '#diagnostics-list .diagnostic-item[data-path="/scope_unopened.py"]'
-    )
+    unopened_rows = page.locator('#diagnostics-list .diagnostic-item[data-path="/scope_unopened.py"]')
     expect(unopened_rows).to_have_count(1, timeout=30_000)
     expect(unopened_rows.first).to_contain_text("not assignable")
     page.screenshot(path=tmp_path / "diagnostics-unopened-workspace-file.png")
@@ -235,10 +200,6 @@ def test_typechecking_scope_includes_unopened_files_and_opens_them_from_diagnost
     expect(unopened_rows).to_have_count(1, timeout=30_000)
 
     unopened_rows.first.click()
-    expect(page.locator("#editor-tabs .tab.active")).to_have_attribute(
-        "data-fn", "/scope_unopened.py"
-    )
-    expect(page.locator(".editor-tab-pane.active .cm-activeLine")).to_contain_text(
-        "workspace_value"
-    )
+    expect(page.locator("#editor-tabs .tab.active")).to_have_attribute("data-fn", "/scope_unopened.py")
+    expect(page.locator(".editor-tab-pane.active .cm-activeLine")).to_contain_text("workspace_value")
     assert console_errors == []
