@@ -38,7 +38,7 @@ jobs:
       # The package suite skips itself if micropython.org cannot be reached.
       - name: Test
         run: |
-          npm install
+          python3 build.py --prepare
           npm run lint
           npm run test
 

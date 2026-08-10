@@ -11,5 +11,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Build and test
-        run: python3 build.py
+      - name: Prepare
+        run: python3 build.py --prepare
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm run test
+
+      - name: Build
+        run: python3 build.py --skip-tests
