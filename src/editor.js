@@ -19,6 +19,7 @@ import { toml } from '@codemirror/legacy-modes/mode/toml'
 import { monokaiInit } from '@uiw/codemirror-theme-monokai'
 import { tags } from '@lezer/highlight'
 import { linter } from '@codemirror/lint'
+import { highlightSelectionMatches } from '@codemirror/search'
 
 import { validatePython, getRuffWorkspace } from './python_utils.js'
 
@@ -452,6 +453,7 @@ export async function createNewEditor(editorElement, fn, content, options) {
             doc: content,
             extensions: [
                 basicSetup,
+                highlightSelectionMatches({ minSelectionLength: 2 }),
                 //closedText: '▶',
                 //openText: '▼',
                 monokaiInit({

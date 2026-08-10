@@ -11,8 +11,7 @@
  */
 
 import { assert } from 'chai'
-
-const MODULE_URL = new URL('../../src/fs_cache.js', import.meta.url).href
+import { FsCache } from '../../src/fs_cache.js'
 
 let seq = 0
 let blobs = null
@@ -40,9 +39,8 @@ function makeStorage() {
     }
 }
 
-/* A fresh copy of the module per test: its state is module-level by design, and
-   a query string is the only way to defeat the ES module cache. */
-async function freshCache() {
+/* A fresh instance per test - no module-cache tricks needed now that it's a class. */
+function freshCache() {
     storage = makeStorage()
     blobs = { created: 0, revoked: 0, live: new Set() }
     globalThis.localStorage = storage
@@ -56,7 +54,7 @@ async function freshCache() {
         blobs.revoked++
         blobs.live.delete(url)
     }
-    return await import(`${MODULE_URL}?n=${++seq}`)
+    return new FsCache()
 }
 
 /* walkFs() node shapes: a file carries a size, a directory carries `content`. */
@@ -107,8 +105,8 @@ describe('FS cache', () => {
      * Listing
      */
 
-    it('first reconcile reports no deltas', async () => {
-        const fc = await freshCache()
+    it('first reconcile reports no deltas', () => {
+        const fc = freshCache()
         assert(fc.isListingStale(), 'starts stale')
         const delta = fc.reconcileListing([file('/main.py', 10), dir('/lib', [file('/lib/a.py', 5)])])
         assert.strictEqual(delta.changed.length, 0, 'changed')
@@ -121,7 +119,7 @@ describe('FS cache', () => {
     })
 
     it('reconcile reports a size change only for paths someone holds', async () => {
-        const fc = await freshCache()
+        const fc = freshCache()
         const raw = fakeRaw({ '/held.py': 'x', '/loose.py': 'y' })
         fc.reconcileListing([file('/held.py', 1), file('/loose.py', 1)])
         await fc.readFile(raw, '/held.py')
@@ -131,8 +129,8 @@ describe('FS cache', () => {
         assert.strictEqual(fc.peek('/held.py'), null, 'stale body dropped')
     })
 
-    it('reconcile reports a view path with no cached body', async () => {
-        const fc = await freshCache()
+    it('reconcile reports a view path with no cached body', () => {
+        const fc = freshCache()
         fc.reconcileListing([file('/main.py', 3)])
         fc.openView('/main.py', { baseline: 'abc' })
         const delta = fc.reconcileListing([file('/main.py', 4)])
@@ -140,7 +138,7 @@ describe('FS cache', () => {
     })
 
     it('a same-length overwrite is caught through invalidate', async () => {
-        const fc = await freshCache()
+        const fc = freshCache()
         const raw = fakeRaw({ '/cfg.json': '{"a":1}' })
         fc.reconcileListing([file('/cfg.json', 7)])
         await fc.readFile(raw, '/cfg.json')
@@ -153,8 +151,8 @@ describe('FS cache', () => {
         assert.strictEqual(fc.peek('/cfg.json'), null)
     })
 
-    it('touched is consumed by one reconcile', async () => {
-        const fc = await freshCache()
+    it('touched is consumed by one reconcile', () => {
+        const fc = freshCache()
         fc.reconcileListing([file('/a.py', 1)])
         fc.openView('/a.py', { baseline: 'x' })
         fc.invalidate('/a.py')
@@ -163,7 +161,7 @@ describe('FS cache', () => {
     })
 
     it('reconcile reports vanished paths that are held', async () => {
-        const fc = await freshCache()
+        const fc = freshCache()
         const raw = fakeRaw({ '/gone.py': 'x', '/stays.py': 'y' })
         fc.reconcileListing([file('/gone.py', 1), file('/stays.py', 1)])
         await fc.readFile(raw, '/gone.py')
@@ -176,8 +174,8 @@ describe('FS cache', () => {
         assert(fc.peek('/stays.py') !== null, 'the surviving body is kept')
     })
 
-    it('virtual paths are flagged by the caller predicate', async () => {
-        const fc = await freshCache()
+    it('virtual paths are flagged by the caller predicate', () => {
+        const fc = freshCache()
         const isVirtual = (p) => /^\/(proc|dev|sys)(\/|$)/.test(p)
         fc.reconcileListing([file('/main.py', 1), dir('/proc', [file('/proc/stat', 0)])], isVirtual)
         assert.strictEqual(fc.get('/main.py').virtual, false)
@@ -185,8 +183,8 @@ describe('FS cache', () => {
         assert.strictEqual(fc.get('/proc/stat').virtual, true)
     })
 
-    it('countUnder counts everything below a path', async () => {
-        const fc = await freshCache()
+    it('countUnder counts everything below a path', () => {
+        const fc = freshCache()
         fc.reconcileListing([
             dir('/lib', [file('/lib/a.py', 1), dir('/lib/sub', [file('/lib/sub/b.py', 1)])]),
             file('/main.py', 1),
@@ -197,12 +195,13 @@ describe('FS cache', () => {
         assert.strictEqual(fc.countUnder('/'), 5, 'lib, lib/a.py, lib/sub, lib/sub/b.py, main.py')
     })
 
+
     /*
      * Content and generation
      */
 
     it('readFile caches and serves without a second read', async () => {
-        const fc = await freshCache()
+        const fc = freshCache()
         const raw = fakeRaw({ '/main.py': 'print(1)' })
         fc.reconcileListing([file('/main.py', 8)])
 
@@ -212,7 +211,7 @@ describe('FS cache', () => {
     })
 
     it('a body whose listed size moved is not served', async () => {
-        const fc = await freshCache()
+        const fc = freshCache()
         const raw = fakeRaw({ '/main.py': 'print(1)' })
         fc.reconcileListing([file('/main.py', 8)])
         await fc.readFile(raw, '/main.py')
@@ -223,7 +222,7 @@ describe('FS cache', () => {
     })
 
     it('deviceMayHaveChanged drops bodies but keeps the listing', async () => {
-        const fc = await freshCache()
+        const fc = freshCache()
         const raw = fakeRaw({ '/main.py': 'x' })
         fc.reconcileListing([file('/main.py', 1)])
         await fc.readFile(raw, '/main.py')
@@ -241,7 +240,7 @@ describe('FS cache', () => {
     })
 
     it('dropDeviceState clears the device but keeps views and drafts', async () => {
-        const fc = await freshCache()
+        const fc = freshCache()
         const raw = fakeRaw({ '/main.py': 'x' })
         fc.setDevice(DEV, 'usb')
         fc.reconcileListing([file('/main.py', 1)])
@@ -257,8 +256,8 @@ describe('FS cache', () => {
         assert(storage.keys().length === 1, 'the backup survives')
     })
 
-    it('open views are re-checked against whatever board comes back', async () => {
-        const fc = await freshCache()
+    it('open views are re-checked against whatever board comes back', () => {
+        const fc = freshCache()
         fc.reconcileListing([file('/main.py', 1)])
         fc.openView('/main.py', { baseline: 'x' })
         fc.dropDeviceState()
@@ -268,8 +267,8 @@ describe('FS cache', () => {
         assert.strictEqual(delta.changed.join(), '/main.py')
     })
 
-    it('a tab with no file behind it is not reconciled against the next board', async () => {
-        const fc = await freshCache()
+    it('a tab with no file behind it is not reconciled against the next board', () => {
+        const fc = freshCache()
         fc.reconcileListing([file('/main.py', 1)])
         fc.openView('~sysinfo.md', { baseline: '' })
         fc.openView('/main.py', { baseline: 'x' })
@@ -281,7 +280,7 @@ describe('FS cache', () => {
     })
 
     it('a write that resolves after the port died is not cached', async () => {
-        const fc = await freshCache()
+        const fc = freshCache()
         fc.reconcileListing([file('/main.py', 1)])
         const raw = fakeRaw({ '/main.py': 'x' })
         const slow = {
@@ -295,7 +294,7 @@ describe('FS cache', () => {
     })
 
     it('a read that resolves after a generation bump is not cached', async () => {
-        const fc = await freshCache()
+        const fc = freshCache()
         fc.reconcileListing([file('/main.py', 1)])
         const slow = {
             readFile: async () => {
@@ -308,7 +307,7 @@ describe('FS cache', () => {
     })
 
     it('writeFile records the new size so the next reconcile stays quiet', async () => {
-        const fc = await freshCache()
+        const fc = freshCache()
         const raw = fakeRaw({ '/main.py': 'x' })
         fc.reconcileListing([file('/main.py', 1)])
         fc.openView('/main.py', { baseline: 'x' })
@@ -322,7 +321,7 @@ describe('FS cache', () => {
     })
 
     it('a failed write leaves no cache entry and re-arms the reconcile', async () => {
-        const fc = await freshCache()
+        const fc = freshCache()
         const raw = fakeRaw({ '/main.py': 'old' })
         fc.reconcileListing([file('/main.py', 3)])
         await fc.readFile(raw, '/main.py')
@@ -338,8 +337,8 @@ describe('FS cache', () => {
      * Drag-out staging
      */
 
-    it('staging a stale generation is refused and released', async () => {
-        const fc = await freshCache()
+    it('staging a stale generation is refused and released', () => {
+        const fc = freshCache()
         const stale = fc.currentGeneration()
         fc.deviceMayHaveChanged()
         assert.strictEqual(stageBlob(fc, '/main.py', stale), false, 'refused')
@@ -347,8 +346,8 @@ describe('FS cache', () => {
         assert.strictEqual(blobs.live.size, 0, 'the rejected URL was released')
     })
 
-    it('touching a file releases the payloads of the folders above it', async () => {
-        const fc = await freshCache()
+    it('touching a file releases the payloads of the folders above it', () => {
+        const fc = freshCache()
         fc.reconcileListing([dir('/lib', [dir('/lib/sub', [file('/lib/sub/a.py', 1)])])])
         stageBlob(fc, '/lib/sub/a.py')
         stageBlob(fc, '/lib/sub')
@@ -360,8 +359,8 @@ describe('FS cache', () => {
         assert.strictEqual(blobs.live.size, 0, 'the file and every zip containing it')
     })
 
-    it('staging one file leaves its siblings and parents alone', async () => {
-        const fc = await freshCache()
+    it('staging one file leaves its siblings and parents alone', () => {
+        const fc = freshCache()
         fc.reconcileListing([dir('/lib', [file('/lib/a.py', 1), file('/lib/b.py', 1)])])
         stageBlob(fc, '/lib')
         stageBlob(fc, '/lib/a.py')
@@ -369,12 +368,13 @@ describe('FS cache', () => {
         assert.strictEqual(blobs.revoked, 0)
     })
 
+
     /*
      * Mutations
      */
 
     it('renamed migrates a whole subtree', async () => {
-        const fc = await freshCache()
+        const fc = freshCache()
         const raw = fakeRaw({ '/lib/a.py': 'x' })
         fc.reconcileListing([dir('/lib', [file('/lib/a.py', 1)])])
         await fc.readFile(raw, '/lib/a.py')
@@ -393,8 +393,8 @@ describe('FS cache', () => {
         assert('/pkg/a.py' in stored.files, 'the backup followed the rename')
     })
 
-    it('renamed releases payloads in the moved subtree', async () => {
-        const fc = await freshCache()
+    it('renamed releases payloads in the moved subtree', () => {
+        const fc = freshCache()
         fc.reconcileListing([dir('/lib', [file('/lib/a.py', 1)])])
         stageBlob(fc, '/lib/a.py')
         fc.renamed('/lib', '/pkg')
@@ -402,8 +402,8 @@ describe('FS cache', () => {
         assert.strictEqual(blobs.live.size, 0)
     })
 
-    it('removed forgets the file, its view and its backup', async () => {
-        const fc = await freshCache()
+    it('removed forgets the file, its view and its backup', () => {
+        const fc = freshCache()
         fc.setDevice(DEV, 'usb')
         fc.reconcileListing([file('/main.py', 1)])
         fc.openView('/main.py', { baseline: 'x' })
@@ -417,8 +417,8 @@ describe('FS cache', () => {
         assert.strictEqual(storage.keys().length, 0, 'an explicit delete drops the backup')
     })
 
-    it('removedTree forgets everything below the path', async () => {
-        const fc = await freshCache()
+    it('removedTree forgets everything below the path', () => {
+        const fc = freshCache()
         fc.setDevice(DEV, 'usb')
         fc.reconcileListing([dir('/lib', [file('/lib/a.py', 1)]), file('/keep.py', 1)])
         fc.openView('/lib/a.py', { baseline: 'x' })
@@ -440,8 +440,8 @@ describe('FS cache', () => {
      * Editor views
      */
 
-    it('dirty is a comparison, so an undo clears it', async () => {
-        const fc = await freshCache()
+    it('dirty is a comparison, so an undo clears it', () => {
+        const fc = freshCache()
         fc.openView('/main.py', { baseline: 'print(1)' })
         assert.strictEqual(fc.isDirty('/main.py'), false, 'freshly opened')
         assert.strictEqual(fc.setDraft('/main.py', 'print(2)'), true, 'edited')
@@ -449,16 +449,16 @@ describe('FS cache', () => {
         assert.strictEqual(fc.isDirty('/main.py'), false)
     })
 
-    it('a read-only view is never dirty', async () => {
-        const fc = await freshCache()
+    it('a read-only view is never dirty', () => {
+        const fc = freshCache()
         fc.setDevice(DEV, 'usb')
         fc.openView('/fw.mpy', { baseline: 'disassembly', readOnly: true })
         assert.strictEqual(fc.setDraft('/fw.mpy', 'anything else'), false)
         assert.strictEqual(storage.keys().length, 0, 'and is never backed up')
     })
 
-    it('a rendered pane keeps its kind', async () => {
-        const fc = await freshCache()
+    it('a rendered pane keeps its kind', () => {
+        const fc = freshCache()
         fc.openView('/img.bin', { baseline: '', kind: 'hex', readOnly: true })
         fc.openView('/README.md', { baseline: '# hi', kind: 'markdown', readOnly: true })
         assert.strictEqual(fc.kindOf('/img.bin'), 'hex')
@@ -466,8 +466,8 @@ describe('FS cache', () => {
         assert.strictEqual(fc.kindOf('/nope.py'), null, 'not open')
     })
 
-    it('rebaseView clears dirty and conflict together', async () => {
-        const fc = await freshCache()
+    it('rebaseView clears dirty and conflict together', () => {
+        const fc = freshCache()
         fc.openView('/main.py', { baseline: 'a' })
         fc.setDraft('/main.py', 'b')
         fc.setConflict('/main.py', true)
@@ -479,12 +479,13 @@ describe('FS cache', () => {
         assert.strictEqual(fc.setDraft('/main.py', 'b'), false, 'b is the new baseline')
     })
 
+
     /*
      * Draft backup
      */
 
-    it('a draft is backed up and dropped again on save', async () => {
-        const fc = await freshCache()
+    it('a draft is backed up and dropped again on save', () => {
+        const fc = freshCache()
         fc.setDevice(DEV, 'usb')
         fc.openView('/main.py', { baseline: 'a' })
 
@@ -498,8 +499,8 @@ describe('FS cache', () => {
         assert.strictEqual(storage.keys().length, 0, 'the record goes when its last draft does')
     })
 
-    it('closing a tab drops its backup', async () => {
-        const fc = await freshCache()
+    it('closing a tab drops its backup', () => {
+        const fc = freshCache()
         fc.setDevice(DEV, 'usb')
         fc.openView('/main.py', { baseline: 'a' })
         fc.setDraft('/main.py', 'b')
@@ -508,8 +509,8 @@ describe('FS cache', () => {
         assert.strictEqual(fc.kindOf('/main.py'), null)
     })
 
-    it('undoing back to the baseline drops the backup', async () => {
-        const fc = await freshCache()
+    it('undoing back to the baseline drops the backup', () => {
+        const fc = freshCache()
         fc.setDevice(DEV, 'usb')
         fc.openView('/main.py', { baseline: 'a' })
         fc.setDraft('/main.py', 'b')
@@ -518,15 +519,15 @@ describe('FS cache', () => {
         assert.strictEqual(storage.keys().length, 0)
     })
 
-    it('a draft survives a disconnect and is offered on the next connect', async () => {
-        const fc = await freshCache()
+    it('a draft survives a disconnect and is offered on the next connect', () => {
+        const fc = freshCache()
         fc.setDevice(DEV, 'usb')
         fc.openView('/main.py', { baseline: 'a' })
         fc.setDraft('/main.py', 'work in progress')
         fc.dropDeviceState()
 
-        // A new session, same board
-        const next = await import(`${MODULE_URL}?n=${++seq}`)
+        // A new instance, same board - reads the persisted drafts from storage
+        const next = new FsCache()
         assert.strictEqual(next.takeRestorableDrafts().length, 0, 'nothing before the board is known')
         next.setDevice(DEV, 'usb')
         const restorable = next.takeRestorableDrafts()
@@ -536,34 +537,34 @@ describe('FS cache', () => {
         assert.strictEqual(next.takeRestorableDrafts().length, 0, 'offered once')
     })
 
-    it('another board sees none of it', async () => {
-        const fc = await freshCache()
+    it('another board sees none of it', () => {
+        const fc = freshCache()
         fc.setDevice(DEV, 'usb')
         fc.openView('/main.py', { baseline: 'a' })
         fc.setDraft('/main.py', 'b')
 
-        const next = await import(`${MODULE_URL}?n=${++seq}`)
+        const next = new FsCache()
         next.setDevice({ uid: 'ffffff', machine: 'Other' }, 'usb')
         assert.strictEqual(next.takeRestorableDrafts().length, 0)
         assert.strictEqual(storage.keys().length, 1, "and the first board's record is left alone")
     })
 
-    it('a board with no uid gets an ambiguous bucket', async () => {
-        const fc = await freshCache()
+    it('a board with no uid gets an ambiguous bucket', () => {
+        const fc = freshCache()
         const { ambiguous } = fc.setDevice(NO_UID, 'usb')
         assert.strictEqual(ambiguous, true)
         assert.strictEqual(fc.isAmbiguousBucket(), true)
         fc.openView('/main.py', { baseline: 'a' })
         fc.setDraft('/main.py', 'b')
 
-        const next = await import(`${MODULE_URL}?n=${++seq}`)
+        const next = new FsCache()
         next.setDevice(NO_UID, 'usb')
         assert.strictEqual(next.isAmbiguousBucket(), true, 'so the caller can ask before restoring')
         assert.strictEqual(next.takeRestorableDrafts().length, 1, 'but the work is still there')
     })
 
-    it('drafts made before the board is known are kept', async () => {
-        const fc = await freshCache()
+    it('drafts made before the board is known are kept', () => {
+        const fc = freshCache()
         fc.openView('/notes.txt', { baseline: '' })
         fc.setDraft('/notes.txt', 'notes to self')
         assert.strictEqual(storage.keys().length, 0, 'nowhere to put it yet')
@@ -574,8 +575,8 @@ describe('FS cache', () => {
         assert.strictEqual(stored.files['/notes.txt'].text, 'notes to self')
     })
 
-    it('a full store disables backups without losing anything else', async () => {
-        const fc = await freshCache()
+    it('a full store disables backups without losing anything else', () => {
+        const fc = freshCache()
         fc.setDevice(DEV, 'usb')
         fc.openView('/a.py', { baseline: '' })
         fc.setDraft('/a.py', 'first')
@@ -591,10 +592,9 @@ describe('FS cache', () => {
         assert.strictEqual(fc.isDirty('/b.py'), true, 'and the editor still tracks the new one')
     })
 
-    it('a corrupt record is ignored rather than fatal', async () => {
-        await freshCache()
+    it('a corrupt record is ignored rather than fatal', () => {
+        const fc = freshCache()
         storage.setItem('viper-drafts.v1.uid.aabbcc', '{not json')
-        const fc = await import(`${MODULE_URL}?n=${++seq}`)
         fc.setDevice(DEV, 'usb')
         assert.strictEqual(fc.takeRestorableDrafts().length, 0)
         assert.strictEqual(fc.persistenceEnabled(), true)

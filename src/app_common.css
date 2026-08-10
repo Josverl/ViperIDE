@@ -323,7 +323,7 @@ option {
 
 .tabs {
     display: flex;
-    align-items: center;
+    align-items: flex-end;
     justify-content: space-between;
     user-select: none;
     font-size: 1.1rem;
