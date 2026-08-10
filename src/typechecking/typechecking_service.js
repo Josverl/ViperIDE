@@ -212,6 +212,7 @@ export class TypecheckingService {
       languageId: 'python',
       initialContent: content,
       diagnosticDelayMs: DIAGNOSTIC_DELAY_MS,
+      completionDelayMs: 0,
     })
   }
 

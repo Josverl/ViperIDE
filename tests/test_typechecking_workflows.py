@@ -161,6 +161,33 @@ def test_local_imports_follow_changes_across_open_tabs(
     page.screenshot(path=tmp_path / "typechecking-local-multi-tab-imports.png")
 
 
+def test_dotted_completion_opens_on_every_first_trigger(
+    page, viperide_server, tmp_path
+):
+    console_errors = _console_errors(page)
+    _configure_typechecking(page, **{"typecheck-scope": "openFilesOnly"})
+    page.goto(f"{viperide_server}/?vm=1", wait_until="domcontentloaded")
+
+    _expect_vm_typechecking_ready(page)
+    editor = page.locator(".editor-tab-pane.active .cm-content")
+    autocomplete = page.locator(".cm-tooltip-autocomplete")
+
+    for _ in range(5):
+        editor.fill("import time as t\n")
+        editor.press_sequentially("t.", delay=30)
+        expect(autocomplete).to_be_visible(timeout=15_000)
+        expect(autocomplete.locator(".cm-completionLabel", has_text="sleep").first).to_be_visible()
+        page.keyboard.press("Escape")
+        expect(autocomplete).to_be_hidden()
+
+    editor.fill("import time as t\n")
+    editor.press_sequentially("t.", delay=30)
+    expect(autocomplete).to_be_visible(timeout=15_000)
+    expect(autocomplete.locator(".cm-completionLabel", has_text="sleep").first).to_be_visible()
+    assert console_errors == []
+    page.screenshot(path=tmp_path / "typechecking-dotted-autocomplete.png")
+
+
 def test_fast_tab_switching_keeps_content_and_diagnostics_with_their_files(
     page, viperide_server, tmp_path
 ):
