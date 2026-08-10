@@ -293,6 +293,7 @@ describe('TypecheckingService', () => {
         assert.strictEqual(pluginOptions.fileUri, uri)
         assert.strictEqual(pluginOptions.initialContent, 'print(1)')
         assert.strictEqual(pluginOptions.diagnosticDelayMs, 300)
+        assert.strictEqual(pluginOptions.completionDelayMs, 0)
         assert.deepEqual(configured, [{ view, extensions: ['lsp-extension'] }])
         assert.strictEqual(service.documentVersions.get(uri), 1)
         assert.deepEqual(notifications, [{
