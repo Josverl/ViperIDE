@@ -313,7 +313,8 @@ const mpyCrossLinter = linter(async (view) => {
       from: line.from,
       to: line.to,
       severity: 'error',
-      message: 'MicroPython: ' + backtrace.message,
+      message: backtrace.message,
+      source: 'mpy-cross',
     })
   }
   return diagnostics
