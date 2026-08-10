@@ -3,6 +3,21 @@ import re
 from playwright.sync_api import expect
 
 
+def test_mpy_cross_diagnostic_includes_exception_class(page, viperide_server, tmp_path):
+    page.on("dialog", lambda dialog: dialog.dismiss())
+    page.goto(f"{viperide_server}/?vm=1", wait_until="domcontentloaded")
+
+    page.locator(".cm-content").fill("1a\n")
+    page.locator('[data-target="diagnostics"]').click()
+
+    diagnostic = page.locator(".diagnostic-item").filter(has=page.locator(".diagnostic-source", has_text="mpy-cross"))
+    expect(diagnostic).to_be_visible(timeout=30_000)
+    expect(diagnostic.locator(".diagnostic-message")).to_have_text(
+        "SyntaxError: invalid syntax for integer with base 10: '1a'"
+    )
+    page.screenshot(path=tmp_path / "mpy-cross-syntax-error.png")
+
+
 def test_diagnostics_panel_filters_jumps_and_run_returns_to_terminal(page, viperide_server, tmp_path):
     console_errors = []
     page.on(
