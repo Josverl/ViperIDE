@@ -60,7 +60,7 @@ describe('Rollup HTTPS module loader', () => {
     it('bundles ViperIDE type checking with tagged client and local CodeMirror', async function () {
         this.timeout(30000)
         const bundle = await rollup({
-            input: 'src/typechecking.js',
+            input: 'src/typechecking/typechecking.js',
             plugins: [
                 httpsModuleLoader({ baseUrl: BASE }),
                 resolve(),

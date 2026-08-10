@@ -5,7 +5,7 @@
 
 import { assert } from 'chai'
 
-import { stubTargetForDevice, TypecheckingService } from '../../src/typechecking_service.js'
+import { stubTargetForDevice, TypecheckingService } from '../../../src/typechecking/typechecking_service.js'
 
 function deferred() {
     let resolve

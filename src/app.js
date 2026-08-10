@@ -40,7 +40,7 @@ import {
     resolveTypecheckingBoard,
     typecheckingBoardOptions,
     typecheckingRuntimeConfig,
-} from './typechecking_settings.js'
+} from './typechecking/typechecking_settings.js'
 import { renderMarkdown } from './markdown.js'
 
 import { UAParser } from 'ua-parser-js'
@@ -56,12 +56,12 @@ import fsCache from './fs_cache.js'
 import { createZipSync } from './zip.js'
 
 import { initControlClient } from './control_client.js'
-import { loadTypecheckingStubManifest, typechecking } from './typechecking.js'
-import { collectDiagnosticEntries, renderTypecheckingStatus } from './typechecking_status.js'
+import { loadTypecheckingStubManifest, typechecking } from './typechecking/typechecking.js'
+import { collectDiagnosticEntries, renderTypecheckingStatus } from './typechecking/typechecking_status.js'
 import {
     shouldMirrorDevicePythonWorkspace,
     syncDevicePythonWorkspace,
-} from './typechecking_workspace.js'
+} from './typechecking/typechecking_workspace.js'
 import {
     diagnosticsPanelPresentation,
     normalizeDiagnosticsFilters,
