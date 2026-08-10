@@ -28,12 +28,12 @@ def test_typechecking_mode_and_board_override_persist(page, viperide_server, tmp
     expect(status).to_have_attribute("data-state", "ready", timeout=90_000)
     expect(status).to_have_attribute("title", re.compile(r"standard mode with webassembly stubs"))
     assert page.evaluate("JSON.parse(localStorage.getItem('settings'))['typecheck-mode']") == "standard"
-    assert page.evaluate("JSON.parse(localStorage.getItem('settings'))['typecheck-scope']") == "workspace"
+    assert page.evaluate("JSON.parse(localStorage.getItem('settings'))['typecheck-scope']") == "openFilesOnly"
     assert page.evaluate("JSON.parse(localStorage.getItem('settings'))['typecheck-stubs']") == "auto"
 
     settings_tab.click()
     expect(mode).to_have_value("standard")
-    expect(scope).to_have_value("workspace")
+    expect(scope).to_have_value("openFilesOnly")
     expect(scope.locator("option[value=workspace]")).to_have_text("All")
     expect(scope.locator("option[value=openFilesOnly]")).to_have_text("Opened")
     expect(board).to_have_value("auto")
@@ -73,12 +73,6 @@ def test_typechecking_mode_and_board_override_persist(page, viperide_server, tmp
     expect(status).to_have_attribute("title", re.compile(r"strict mode with rp2 stubs"), timeout=90_000)
     assert page.evaluate("JSON.parse(localStorage.getItem('settings'))['typecheck-mode']") == "strict"
     assert page.evaluate("JSON.parse(localStorage.getItem('settings'))['typecheck-stubs']") == "rp2"
-    scope.select_option("openFilesOnly")
-    expect(status).to_have_attribute("data-state", "ready", timeout=90_000)
-    assert (
-        page.evaluate("JSON.parse(localStorage.getItem('settings'))['typecheck-scope']")
-        == "openFilesOnly"
-    )
 
     page.reload(wait_until="domcontentloaded")
     expect(status).to_have_attribute("data-state", "ready", timeout=90_000)

@@ -6,7 +6,7 @@
 import { stubTargetForDevice } from './typechecking_service.js'
 
 export const DEFAULT_TYPECHECKING_MODE = 'standard'
-export const DEFAULT_TYPECHECKING_SCOPE = 'workspace'
+export const DEFAULT_TYPECHECKING_SCOPE = 'openFilesOnly'
 export const AUTO_TYPECHECKING_BOARD = 'auto'
 
 const TYPECHECKING_MODES = new Set(['basic', 'standard', 'strict'])
