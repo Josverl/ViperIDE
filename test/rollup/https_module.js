@@ -9,7 +9,7 @@ import resolve from '@rollup/plugin-node-resolve'
 
 import { httpsModuleLoader } from '../../scripts/rollup_https_module.js'
 
-const BASE = 'https://cdn.jsdelivr.net/gh/Josverl/stubs_playground@lsp-client-v0.2.8/'
+const BASE = 'https://cdn.jsdelivr.net/gh/Josverl/stubs_playground@lsp-client-v0.2.10/'
 const ENTRY = `${BASE}packages/lsp-client/src/index.js`
 
 function response(body, {

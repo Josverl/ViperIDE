@@ -3,7 +3,15 @@ from playwright.sync_api import expect
 
 def test_typechecking_status_can_disable_and_restore_pyright(page, viperide_server, tmp_path):
     console_errors = []
+    component_info = []
     page.on("console", lambda message: console_errors.append(message.text) if message.type == "error" else None)
+    page.on(
+        "console",
+        lambda message: component_info.append(message.text)
+        if message.type in {"log", "info"}
+        and message.text.startswith(("LSP ", "WorkerTransport:", "[pyright-worker]"))
+        else None,
+    )
     page.on("dialog", lambda dialog: dialog.dismiss())
 
     page.goto(viperide_server, wait_until="domcontentloaded")
@@ -34,4 +42,5 @@ def test_typechecking_status_can_disable_and_restore_pyright(page, viperide_serv
     expect(enabled).to_be_checked()
     expect(editor_area).to_be_visible()
     assert console_errors == []
+    assert component_info == []
     page.screenshot(path=tmp_path / "typechecking-status-ready.png")

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: MIT
  */
 
-const WORKER_TAG = 'pyright-worker-v0.2.5'
+const WORKER_TAG = 'pyright-worker-v0.2.6'
 const CDN_ROOT = `https://cdn.jsdelivr.net/gh/Josverl/stubs_playground@${WORKER_TAG}/`
 const WORKER_URL = `${CDN_ROOT}packages/pyright-worker/dist/pyright_worker.js`
 const ASSETS_BASE = `${CDN_ROOT}packages/pyright-worker/assets`
