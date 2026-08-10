@@ -52,7 +52,7 @@ import { getUserUID, getScreenInfo, IdleMonitor, getCssPropertyValue, QSA, QS, Q
          readDroppedFiles } from './utils_browser.js'
 
 import { TreeView, parentDir, TREE_DRAG_TYPE } from './tree_view.js'
-import * as fsCache from './fs_cache.js'
+import fsCache from './fs_cache.js'
 import { createZipSync } from './zip.js'
 
 import { initControlClient } from './control_client.js'

@@ -4,7 +4,7 @@
 - Covers most of the functionality of tools like `Thonny`, `mpremote`, `ampy`, `rshell`
 - **Multiple ways to connect** on **Windows**, **MacOS**, **Linux**, **Android**, **iOS**, **Chromebook**
   - [`Direct USB / Serial`](USB-Serial-REPL.md)
-  - [`WebREPL over internet 🌎`](Web-REPL-Relay.md) - 🚧 *experimental*
+  - [`WebREPL over internet 🌎`](Web-REPL-Relay.md)
   - [`WebREPL in local network`](Web-REPL-Server.md)
   - [`Bluetooth LE`](Bluetooth-REPL.md)
   - [`P2P/WebRTC Bridge`](https://viper-ide.org/bridge.html)

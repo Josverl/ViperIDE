@@ -95,6 +95,7 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="Build the VIPER IDE")
     parser.add_argument("--skip-tests", action="store_true", help="Skip linting and tests")
+    parser.add_argument("--prepare", action="store_true", help="Only vendor dependencies (for running tests without a full build)")
     args = parser.parse_args()
 
     # Prepare
@@ -109,10 +110,14 @@ if __name__ == "__main__":
     gen_tar("src/tools_vfs", "build/assets/tools_vfs.tar.gz")
     gen_tar("src/vm_vfs", "build/assets/vm_vfs.tar.gz")
 
+    if not path.isdir("node_modules"):
+        run("npm install")
+
+    if args.prepare:
+        sys.exit(0)
+
     # Prepare
     if not args.skip_tests:
-        if not path.isdir("node_modules"):
-            run("npm install")
         run("npm run lint")
         run("npm run test")
 

@@ -19,10 +19,11 @@ function getDefaultMainPy() { return `\
 # ViperIDE - MicroPython Web IDE
 # Read more: https://github.com/vshymanskyy/ViperIDE
 
-# 🚧 This is an experimental virtual device 🚧
-# It runs the official MicroPython WASM port directly in your browser
-# Most things work: you can edit and run files, use the Terminal, install packages, etc.
-# WARNING: if your script takes a long time to run, the browser will busy-wait
+# This is a MicroPython virtual machine, running directly in your browser using WebAssembly.
+#
+# WARNING:
+# - if your script takes a long time to run, the browser will busy-wait
+# - treat it as a sandbox, any changes are lost when you refresh the page
 
 def main():
     colors = [
