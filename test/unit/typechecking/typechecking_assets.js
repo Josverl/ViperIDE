@@ -5,7 +5,7 @@
 
 import { assert } from 'chai'
 
-import { TypecheckingAssets } from '../../src/typechecking_assets.js'
+import { TypecheckingAssets } from '../../../src/typechecking/typechecking_assets.js'
 
 const manifest = {
     default: 'esp32',

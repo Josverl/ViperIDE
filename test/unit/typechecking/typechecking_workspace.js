@@ -9,7 +9,7 @@ import {
     readDevicePythonWorkspace,
     shouldMirrorDevicePythonWorkspace,
     syncDevicePythonWorkspace,
-} from '../../src/typechecking_workspace.js'
+} from '../../../src/typechecking/typechecking_workspace.js'
 
 describe('device type-checking workspace', () => {
     it('mirrors only when type checking and whole-workspace analysis are enabled', () => {

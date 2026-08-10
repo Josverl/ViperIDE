@@ -8,7 +8,7 @@ import { assert } from 'chai'
 import {
     renderTypecheckingStatus,
     typecheckingStatusPresentation,
-} from '../../src/typechecking_status.js'
+} from '../../../src/typechecking/typechecking_status.js'
 
 function snapshot(status, options = {}) {
     return {

@@ -14,7 +14,7 @@ import {
     simpleStubVersion,
     typecheckingBoardOptions,
     typecheckingRuntimeConfig,
-} from '../../src/typechecking_settings.js'
+} from '../../../src/typechecking/typechecking_settings.js'
 
 describe('type-checking settings', () => {
     it('normalizes persisted modes and board overrides', () => {
