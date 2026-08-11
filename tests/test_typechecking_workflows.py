@@ -17,18 +17,14 @@ def _configure_typechecking(page, **overrides):
         "typecheck-stubs": "auto",
         **overrides,
     }
-    page.add_init_script(
-        f"localStorage.setItem('settings', {json.dumps(json.dumps(settings))});"
-    )
+    page.add_init_script(f"localStorage.setItem('settings', {json.dumps(json.dumps(settings))});")
 
 
 def _console_errors(page):
     errors = []
     page.on(
         "console",
-        lambda message: errors.append(message.text)
-        if message.type == "error"
-        else None,
+        lambda message: errors.append(message.text) if message.type == "error" else None,
     )
     return errors
 
@@ -36,24 +32,20 @@ def _console_errors(page):
 def _create_python_file(page, path, content):
     page.once("dialog", lambda dialog: dialog.accept(path))
     page.evaluate("app.createNewFile('/')")
-    expect(page.locator("#editor-tabs .tab.active")).to_have_attribute(
-        "data-fn", f"/{path}"
-    )
+    expect(page.locator("#editor-tabs .tab.active")).to_have_attribute("data-fn", f"/{path}")
     page.locator(".editor-tab-pane.active .cm-content").fill(content)
 
 
 def _pyright_rows(page, path):
-    return page.locator(
-        f'#diagnostics-list .diagnostic-item[data-path="{path}"]'
-    ).filter(has=page.locator(".diagnostic-source", has_text="Pyright"))
+    return page.locator(f'#diagnostics-list .diagnostic-item[data-path="{path}"]').filter(
+        has=page.locator(".diagnostic-source", has_text="Pyright")
+    )
 
 
 def _expect_vm_typechecking_ready(page):
     status = page.locator("#typecheck-tab")
     expect(status).to_have_attribute("data-state", "ready", timeout=90_000)
-    expect(status).to_have_attribute(
-        "title", re.compile(r"standard mode with webassembly stubs"), timeout=90_000
-    )
+    expect(status).to_have_attribute("title", re.compile(r"standard mode with webassembly stubs"), timeout=90_000)
     return status
 
 
@@ -116,9 +108,7 @@ def test_typechecking_startup_failure_is_visible_and_retryable(
     page.screenshot(path=tmp_path / f"typechecking-startup-{failure_name}-recovered.png")
 
 
-def test_local_imports_follow_changes_across_open_tabs(
-    page, viperide_server, tmp_path
-):
+def test_local_imports_follow_changes_across_open_tabs(page, viperide_server, tmp_path):
     console_errors = _console_errors(page)
     _configure_typechecking(page, **{"typecheck-scope": "openFilesOnly"})
     page.goto(f"{viperide_server}/?vm=1", wait_until="domcontentloaded")
@@ -128,15 +118,12 @@ def test_local_imports_follow_changes_across_open_tabs(
     _create_python_file(
         page,
         "helper.py",
-        "def make_label(value: int) -> str:\n"
-        "    return str(value)\n",
+        "def make_label(value: int) -> str:\n    return str(value)\n",
     )
     _create_python_file(
         page,
         "consumer.py",
-        "from helper import make_label\n"
-        "\n"
-        "label: int = make_label(1)\n",
+        "from helper import make_label\n\nlabel: int = make_label(1)\n",
     )
 
     page.locator('[data-target="diagnostics"]').click()
@@ -146,24 +133,17 @@ def test_local_imports_follow_changes_across_open_tabs(
     expect(consumer_rows.first).not_to_contain_text("could not be resolved")
 
     page.locator('#editor-tabs .tab[data-fn="/helper.py"]').click()
-    page.locator(".editor-tab-pane.active .cm-content").fill(
-        "def make_label(value: int) -> int:\n"
-        "    return value\n"
-    )
+    page.locator(".editor-tab-pane.active .cm-content").fill("def make_label(value: int) -> int:\n    return value\n")
 
     expect(consumer_rows).to_have_count(0, timeout=30_000)
     page.locator('#editor-tabs .tab[data-fn="/consumer.py"]').click()
-    expect(page.locator(".editor-tab-pane.active .cm-content")).to_contain_text(
-        "from helper import make_label"
-    )
+    expect(page.locator(".editor-tab-pane.active .cm-content")).to_contain_text("from helper import make_label")
     expect(status).to_have_attribute("data-state", "ready")
     assert console_errors == []
     page.screenshot(path=tmp_path / "typechecking-local-multi-tab-imports.png")
 
 
-def test_dotted_completion_opens_on_every_first_trigger(
-    page, viperide_server, tmp_path
-):
+def test_dotted_completion_opens_on_every_first_trigger(page, viperide_server, tmp_path):
     console_errors = _console_errors(page)
     _configure_typechecking(page, **{"typecheck-scope": "openFilesOnly"})
     page.goto(f"{viperide_server}/?vm=1", wait_until="domcontentloaded")
@@ -188,9 +168,7 @@ def test_dotted_completion_opens_on_every_first_trigger(
     page.screenshot(path=tmp_path / "typechecking-dotted-autocomplete.png")
 
 
-def test_fast_tab_switching_keeps_content_and_diagnostics_with_their_files(
-    page, viperide_server, tmp_path
-):
+def test_fast_tab_switching_keeps_content_and_diagnostics_with_their_files(page, viperide_server, tmp_path):
     console_errors = _console_errors(page)
     _configure_typechecking(page, **{"typecheck-scope": "openFilesOnly"})
     page.goto(f"{viperide_server}/?vm=1", wait_until="domcontentloaded")
@@ -214,9 +192,7 @@ def test_fast_tab_switching_keeps_content_and_diagnostics_with_their_files(
         document.querySelector('#editor-tabs .tab[data-fn="/switch_a.py"]').click();
         """
     )
-    expect(page.locator("#editor-tabs .tab.active")).to_have_attribute(
-        "data-fn", "/switch_a.py"
-    )
+    expect(page.locator("#editor-tabs .tab.active")).to_have_attribute("data-fn", "/switch_a.py")
     active_editor = page.locator(".editor-tab-pane.active .cm-content")
     expect(active_editor).to_contain_text('only_a: int = "wrong"')
     active_editor.fill("only_a: int = 1\n")
@@ -224,17 +200,13 @@ def test_fast_tab_switching_keeps_content_and_diagnostics_with_their_files(
     expect(first_rows).to_have_count(0, timeout=30_000)
     expect(second_rows).to_have_count(1)
     page.locator('#editor-tabs .tab[data-fn="/switch_b.py"]').click()
-    expect(page.locator(".editor-tab-pane.active .cm-content")).to_contain_text(
-        "only_b: str = 42"
-    )
+    expect(page.locator(".editor-tab-pane.active .cm-content")).to_contain_text("only_b: str = 42")
     expect(status).to_have_attribute("data-state", "ready")
     assert console_errors == []
     page.screenshot(path=tmp_path / "typechecking-fast-tab-switching.png")
 
 
-def test_connected_vm_auto_stubs_and_manual_stub_changes_reanalyze_open_files(
-    page, viperide_server, tmp_path
-):
+def test_connected_vm_auto_stubs_and_manual_stub_changes_reanalyze_open_files(page, viperide_server, tmp_path):
     console_errors = _console_errors(page)
     _configure_typechecking(page, **{"typecheck-scope": "openFilesOnly"})
     page.goto(f"{viperide_server}/?vm=1", wait_until="domcontentloaded")
@@ -244,34 +216,26 @@ def test_connected_vm_auto_stubs_and_manual_stub_changes_reanalyze_open_files(
 
     editor.fill("import rp2\n")
     page.locator('[data-target="diagnostics"]').click()
-    missing_rp2 = _pyright_rows(page, "/main.py").filter(
-        has_text='Import "rp2" could not be resolved'
-    )
+    missing_rp2 = _pyright_rows(page, "/main.py").filter(has_text='Import "rp2" could not be resolved')
     expect(missing_rp2).to_have_count(1, timeout=30_000)
 
     page.locator('[data-target="menu-settings"]').click()
     board = page.locator("#typecheck-stubs")
     expect(board).to_have_value("auto")
     board.select_option("rp2")
-    expect(status).to_have_attribute(
-        "title", re.compile(r"standard mode with rp2 stubs"), timeout=90_000
-    )
+    expect(status).to_have_attribute("title", re.compile(r"standard mode with rp2 stubs"), timeout=90_000)
     expect(missing_rp2).to_have_count(0, timeout=30_000)
     expect(editor).to_contain_text("import rp2")
     page.screenshot(path=tmp_path / "typechecking-rp2-stubs-resolve-import.png")
 
     board.select_option("auto")
-    expect(status).to_have_attribute(
-        "title", re.compile(r"standard mode with webassembly stubs"), timeout=90_000
-    )
+    expect(status).to_have_attribute("title", re.compile(r"standard mode with webassembly stubs"), timeout=90_000)
     expect(missing_rp2).to_have_count(1, timeout=30_000)
     expect(editor).to_contain_text("import rp2")
     assert console_errors == []
 
 
-def test_offline_stub_change_failure_is_visible_and_recovers(
-    page, context, viperide_server, tmp_path
-):
+def test_offline_stub_change_failure_is_visible_and_recovers(page, context, viperide_server, tmp_path):
     _configure_typechecking(page)
     page.goto(f"{viperide_server}/?vm=1", wait_until="domcontentloaded")
 
@@ -301,8 +265,6 @@ def test_offline_stub_change_failure_is_visible_and_recovers(
     expect(status).to_have_attribute("data-state", "disabled")
     enabled.check()
     expect(status).to_have_attribute("data-state", "ready", timeout=90_000)
-    expect(status).to_have_attribute(
-        "title", re.compile(r"standard mode with circuitpython stubs")
-    )
+    expect(status).to_have_attribute("title", re.compile(r"standard mode with circuitpython stubs"))
     expect(page.locator(".cm-content")).to_be_visible()
     page.screenshot(path=tmp_path / "typechecking-offline-stub-change-recovered.png")
