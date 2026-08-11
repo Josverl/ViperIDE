@@ -41,9 +41,7 @@ def test_typechecking_mode_and_board_override_persist(page, viperide_server, tmp
     expect(board.locator("option")).to_have_count(7)
     expect(board.locator("option[value=stdlib]")).to_have_count(0)
     expect(board.locator("option[value=rp2]")).to_have_text("MP RP2 (v1.28.0)")
-    expect(board.locator("option[value=webassembly]")).to_have_text(
-        "MP WebAssembly (v1.28.0)"
-    )
+    expect(board.locator("option[value=webassembly]")).to_have_text("MP WebAssembly (v1.28.0)")
     assert page.locator("#menu-line-other").evaluate(
         "(other) => Boolean(other.compareDocumentPosition("
         "document.querySelector('#menu-line-typechecking')) & Node.DOCUMENT_POSITION_FOLLOWING)"
@@ -100,9 +98,7 @@ def test_typechecking_stub_packages_install_and_persist(page, viperide_server, t
         """
     )
     page.goto(f"{viperide_server}/?vm=1", wait_until="domcontentloaded")
-    expect(page.locator("#typecheck-tab")).to_have_attribute(
-        "data-state", "ready", timeout=90_000
-    )
+    expect(page.locator("#typecheck-tab")).to_have_attribute("data-state", "ready", timeout=90_000)
     page.locator('[data-target="menu-settings"]').click()
 
     package_input = page.locator("#typecheck-stub-package")
@@ -114,9 +110,7 @@ def test_typechecking_stub_packages_install_and_persist(page, viperide_server, t
     )
 
     page.reload(wait_until="domcontentloaded")
-    expect(page.locator("#typecheck-tab")).to_have_attribute(
-        "data-state", "ready", timeout=90_000
-    )
+    expect(page.locator("#typecheck-tab")).to_have_attribute("data-state", "ready", timeout=90_000)
     page.locator('[data-target="menu-settings"]').click()
     expect(page.locator("#typecheck-stub-status")).to_contain_text(
         "types-requests@",

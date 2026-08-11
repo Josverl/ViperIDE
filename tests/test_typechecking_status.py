@@ -7,10 +7,12 @@ def test_typechecking_status_can_disable_and_restore_pyright(page, viperide_serv
     page.on("console", lambda message: console_errors.append(message.text) if message.type == "error" else None)
     page.on(
         "console",
-        lambda message: component_info.append(message.text)
-        if message.type in {"log", "info"}
-        and message.text.startswith(("LSP ", "WorkerTransport:", "[pyright-worker]"))
-        else None,
+        lambda message: (
+            component_info.append(message.text)
+            if message.type in {"log", "info"}
+            and message.text.startswith(("LSP ", "WorkerTransport:", "[pyright-worker]"))
+            else None
+        ),
     )
     page.on("dialog", lambda dialog: dialog.dismiss())
 
