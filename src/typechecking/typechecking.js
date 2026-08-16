@@ -9,8 +9,7 @@ import {
   notifyDocumentChange,
   notifyDocumentClose,
   switchBoard,
-} from
-  'https://cdn.jsdelivr.net/gh/Josverl/stubs_playground@lsp-client-v0.2.11/packages/lsp-client/src/index.js'
+} from '@mp-codemirror/lsp-client'
 
 import { TypecheckingService } from './typechecking_service.js'
 import { typecheckingAssets } from './typechecking_assets.js'
@@ -23,11 +22,6 @@ export const typechecking = new TypecheckingService({
   notifyDocumentClose,
   switchBoard,
   prepareRuntime: config => typecheckingAssets.prepare(config),
-  revokeObjectURL: url => {
-    URL.revokeObjectURL(url)
-    // Allow a later initialization attempt to create a fresh URL after failure.
-    typecheckingAssets.releaseWorkerBlobUrl(url)
-  },
 })
 
 /** @returns {Promise<{default: string, boards: object[]}>} Published worker stub manifest. */

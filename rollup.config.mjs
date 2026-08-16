@@ -7,15 +7,28 @@ import css from 'rollup-plugin-import-css'
 import serve from 'rollup-plugin-serve'
 import sourcemaps from 'rollup-plugin-sourcemaps2';
 import fs from 'fs'
-import { httpsModuleLoader } from './scripts/rollup_https_module.js'
 
 const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'))
 
 // build.py passes this via the environment. When running Rollup directly,
 // default to the local development server.
 const BASE_URL = process.env.VIPER_IDE_BASE_URL || 'http://localhost:10001'
-const LSP_CLIENT_CDN_BASE =
-  'https://cdn.jsdelivr.net/gh/Josverl/stubs_playground@lsp-client-v0.2.11/'
+// Package versions belong only in package.json/package-lock.json. This path deliberately
+// addresses the installed package without duplicating its version in build configuration.
+const PYRIGHT_WORKER_PACKAGE = 'node_modules/@mp-codemirror/pyright-worker'
+const PYRIGHT_WORKER_BUILD = 'build/assets/pyright-worker'
+
+const copyPyrightWorkerPackage = () => {
+  fs.rmSync(PYRIGHT_WORKER_BUILD, { recursive: true, force: true })
+  fs.mkdirSync(PYRIGHT_WORKER_BUILD, { recursive: true })
+  for (const directory of ['assets', 'dist']) {
+    fs.cpSync(
+      `${PYRIGHT_WORKER_PACKAGE}/${directory}`,
+      `${PYRIGHT_WORKER_BUILD}/${directory}`,
+      { recursive: true },
+    )
+  }
+}
 
 const copyHtml = (src, dst) => {
   let data = fs.readFileSync(src, 'utf8').
@@ -76,7 +89,6 @@ const common = (args, name) => ({
     throw new Error(warning.message)
   },
   plugins: [
-    httpsModuleLoader({ baseUrl: LSP_CLIENT_CDN_BASE }),
     stripMicroPythonNodeCli(),
     css({
       output: `${name}.css`,
@@ -105,13 +117,16 @@ const common = (args, name) => ({
   ]
 })
 
-export default args => [{
-  input: './src/app.js',
-  ...common(args, 'app')
-},{
-  input: './src/viper_lib.js',
-  ...common(args, 'viper_lib')
-},{
-  input: './src/app_worker.js',
-  ...common(args, 'app_worker')
-}]
+export default args => {
+  copyPyrightWorkerPackage()
+  return [{
+    input: './src/app.js',
+    ...common(args, 'app')
+  },{
+    input: './src/viper_lib.js',
+    ...common(args, 'viper_lib')
+  },{
+    input: './src/app_worker.js',
+    ...common(args, 'app_worker')
+  }]
+}

@@ -73,13 +73,11 @@ describe('TypecheckingService', () => {
         let calls = 0
         const service = new TypecheckingService({
             createLSPClient: async () => { calls++; return result },
-            revokeObjectURL: () => assert.fail('should not revoke before disposal'),
         })
 
         const [first, second] = await Promise.all([
             service.initialize({
-                workerUrl: 'blob:worker',
-                workerBlobUrl: 'blob:worker',
+                workerUrl: '/assets/pyright-worker/dist/pyright_worker.js',
                 stubBundle: 'esp32',
             }),
             service.initialize({ workerUrl: 'ignored' }),
@@ -101,8 +99,7 @@ describe('TypecheckingService', () => {
         let receivedConfig
         const service = new TypecheckingService({
             prepareRuntime: async config => ({
-                workerUrl: 'blob:worker',
-                workerBlobUrl: 'blob:worker',
+                workerUrl: '/assets/pyright-worker/dist/pyright_worker.js',
                 boardStubs: new ArrayBuffer(1),
                 stubBundle: { id: config.boardId },
             }),
@@ -127,7 +124,10 @@ describe('TypecheckingService', () => {
             source: 'Pyright',
         }])
 
-        assert.strictEqual(receivedConfig.workerUrl, 'blob:worker')
+        assert.strictEqual(
+            receivedConfig.workerUrl,
+            '/assets/pyright-worker/dist/pyright_worker.js',
+        )
         assert.strictEqual(receivedConfig.timeout, 1000)
         assert.strictEqual(receivedConfig.diagnosticMode, 'workspace')
         assert.strictEqual(service.selectedStubBundle.id, 'esp32')
@@ -755,19 +755,16 @@ describe('TypecheckingService', () => {
         assert.doesNotThrow(() => service.setEditorIntegration(() => true))
     })
 
-    it('surfaces initialization errors and releases its Blob URL', async () => {
-        const revoked = []
+    it('surfaces initialization errors', async () => {
         const failure = new Error('worker failed')
         const service = new TypecheckingService({
             createLSPClient: async () => { throw failure },
-            revokeObjectURL: url => revoked.push(url),
         })
 
         let caught
         try {
             await service.initialize({
-                workerUrl: 'blob:failed',
-                workerBlobUrl: 'blob:failed',
+                workerUrl: '/assets/pyright-worker/dist/pyright_worker.js',
             })
         } catch (error) {
             caught = error
@@ -776,19 +773,15 @@ describe('TypecheckingService', () => {
         assert.strictEqual(caught, failure)
         assert.strictEqual(service.status, 'error')
         assert.strictEqual(service.error, failure)
-        assert.deepEqual(revoked, ['blob:failed'])
     })
 
-    it('disconnects resources, clears state, and revokes the Blob URL once', async () => {
+    it('disconnects resources and clears state once', async () => {
         const result = resources()
-        const revoked = []
         const service = new TypecheckingService({
             createLSPClient: async () => result,
-            revokeObjectURL: url => revoked.push(url),
         })
         await service.initialize({
-            workerUrl: 'blob:worker',
-            workerBlobUrl: 'blob:worker',
+            workerUrl: '/assets/pyright-worker/dist/pyright_worker.js',
         })
         service.openDocument('file:///workspace/main.py')
 
@@ -797,7 +790,6 @@ describe('TypecheckingService', () => {
 
         assert.strictEqual(result.client.disconnectCalls, 1)
         assert.strictEqual(result.transport.closeCalls, 1)
-        assert.deepEqual(revoked, ['blob:worker'])
         assert.strictEqual(service.status, 'disposed')
         assert.strictEqual(service.snapshot().documentVersions.size, 0)
     })
@@ -809,14 +801,11 @@ describe('TypecheckingService', () => {
             destroyCalls: 0,
             destroy() { this.destroyCalls++ },
         }
-        const revoked = []
         const service = new TypecheckingService({
             createLSPClient: () => pending.promise,
-            revokeObjectURL: url => revoked.push(url),
         })
         const initialization = service.initialize({
-            workerUrl: 'blob:worker',
-            workerBlobUrl: 'blob:worker',
+            workerUrl: '/assets/pyright-worker/dist/pyright_worker.js',
         })
 
         // Let runtime preparation enter createLSPClient before simulating teardown.
@@ -834,6 +823,5 @@ describe('TypecheckingService', () => {
         assert.strictEqual(result.client.disconnectCalls, 1)
         assert.strictEqual(result.transport.closeCalls, 1)
         assert.strictEqual(result.workspaceDiagnosticsSubscription.destroyCalls, 1)
-        assert.deepEqual(revoked, ['blob:worker'])
     })
 })

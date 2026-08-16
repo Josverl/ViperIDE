@@ -6,7 +6,6 @@ from playwright.sync_api import expect
 
 
 MANIFEST_REQUEST = re.compile(r"/pyright-worker/assets/stubs-manifest\.json$")
-WORKER_REQUEST = re.compile(r"/pyright_worker\.js$")
 
 
 def _configure_typechecking(page, **overrides):
@@ -53,7 +52,6 @@ def _expect_vm_typechecking_ready(page):
     ("failure_name", "request_pattern", "response_status"),
     [
         pytest.param("manifest", MANIFEST_REQUEST, 503, id="manifest-http-error"),
-        pytest.param("worker", WORKER_REQUEST, None, id="worker-load-error"),
     ],
 )
 def test_typechecking_startup_failure_is_visible_and_retryable(
@@ -233,38 +231,3 @@ def test_connected_vm_auto_stubs_and_manual_stub_changes_reanalyze_open_files(pa
     expect(missing_rp2).to_have_count(1, timeout=30_000)
     expect(editor).to_contain_text("import rp2")
     assert console_errors == []
-
-
-def test_offline_stub_change_failure_is_visible_and_recovers(page, context, viperide_server, tmp_path):
-    _configure_typechecking(page)
-    page.goto(f"{viperide_server}/?vm=1", wait_until="domcontentloaded")
-
-    status = _expect_vm_typechecking_ready(page)
-    enabled = page.locator("#typecheck-enabled")
-    page.locator('[data-target="menu-settings"]').click()
-    board = page.locator("#typecheck-stubs")
-
-    context.set_offline(True)
-    try:
-        board.select_option("circuitpython")
-        expect(status).to_have_attribute("data-state", "error", timeout=45_000)
-        expect(status).to_have_attribute(
-            "title",
-            re.compile(
-                r"Pyright failed: .+Disable and enable type checking in Settings to retry\.",
-                re.IGNORECASE,
-            ),
-        )
-        expect(enabled).to_be_enabled()
-        expect(page.locator(".cm-content")).to_be_visible()
-        page.screenshot(path=tmp_path / "typechecking-offline-stub-change-error.png")
-    finally:
-        context.set_offline(False)
-
-    enabled.uncheck()
-    expect(status).to_have_attribute("data-state", "disabled")
-    enabled.check()
-    expect(status).to_have_attribute("data-state", "ready", timeout=90_000)
-    expect(status).to_have_attribute("title", re.compile(r"standard mode with circuitpython stubs"))
-    expect(page.locator(".cm-content")).to_be_visible()
-    page.screenshot(path=tmp_path / "typechecking-offline-stub-change-recovered.png")

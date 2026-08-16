@@ -3,36 +3,31 @@
  * SPDX-License-Identifier: MIT
  */
 
-const WORKER_TAG = 'pyright-worker-v0.2.6'
-const CDN_ROOT = `https://cdn.jsdelivr.net/gh/Josverl/stubs_playground@${WORKER_TAG}/`
-const WORKER_URL = `${CDN_ROOT}packages/pyright-worker/dist/pyright_worker.js`
-const ASSETS_BASE = `${CDN_ROOT}packages/pyright-worker/assets`
+const PACKAGE_BASE = new URL(
+  'assets/pyright-worker/',
+  globalThis.document?.baseURI || 'http://localhost:10001/',
+).href
 
 /**
- * Load immutable worker metadata and create the same-origin Blob shim required
- * to start a cross-origin CDN worker.
+ * Load worker metadata from the npm package assets copied into the ViperIDE build.
  */
 export class TypecheckingAssets {
   /**
    * @param {object} [dependencies={}] Browser API overrides for tests or custom hosts.
    * @param {typeof fetch} [dependencies.fetch] Fetch implementation.
-   * @param {typeof Blob} [dependencies.Blob] Blob constructor.
-   * @param {(blob: Blob) => string} [dependencies.createObjectURL] Object URL factory.
+   * @param {string} [dependencies.packageBase] Public URL of the copied worker package.
    */
   constructor({
     // Browser fetch implementations may require their global object as the receiver.
     fetch: fetchAsset = globalThis.fetch?.bind(globalThis),
-    Blob: BlobClass = globalThis.Blob,
-    createObjectURL = URL.createObjectURL.bind(URL),
+    packageBase = PACKAGE_BASE,
   } = {}) {
     if (typeof fetchAsset !== 'function') {
       throw new TypeError('TypecheckingAssets requires fetch')
     }
     this.fetchAsset = fetchAsset
-    this.BlobClass = BlobClass
-    this.createObjectURL = createObjectURL
+    this.packageBase = packageBase.endsWith('/') ? packageBase : `${packageBase}/`
     this.manifestPromise = null
-    this.workerBlobUrl = null
   }
 
   /**
@@ -51,10 +46,9 @@ export class TypecheckingAssets {
     }
 
     return {
-      workerUrl: this.getWorkerBlobUrl(),
-      workerBlobUrl: this.workerBlobUrl,
+      workerUrl: `${this.packageBase}dist/pyright_worker.js`,
       boardStubs: board.file ? undefined : false,
-      ...(board.file ? { boardStubsUrl: `${ASSETS_BASE}/${board.file}` } : {}),
+      ...(board.file ? { boardStubsUrl: `${this.packageBase}assets/${board.file}` } : {}),
       ...(board.file && board.package
         ? {
             boardStubPackage: {
@@ -76,7 +70,7 @@ export class TypecheckingAssets {
    */
   loadManifest() {
     if (!this.manifestPromise) {
-      this.manifestPromise = this.fetchAsset(`${ASSETS_BASE}/stubs-manifest.json`).
+      this.manifestPromise = this.fetchAsset(`${this.packageBase}assets/stubs-manifest.json`).
         then(response => this.requireResponse(response, 'stub manifest')).
         then(response => response.json()).
         then(manifest => {
@@ -99,34 +93,6 @@ export class TypecheckingAssets {
       throw new Error(`Failed to load type-checking ${description}: HTTP ${response.status}`)
     }
     return response
-  }
-
-  /**
-   * Return one memoized same-origin Blob URL that imports the immutable CDN worker.
-   *
-   * @returns {string} Worker Blob URL.
-   */
-  getWorkerBlobUrl() {
-    if (!this.workerBlobUrl) {
-      const shim = `importScripts(${JSON.stringify(WORKER_URL)});`
-      const blob = new this.BlobClass([shim], { type: 'application/javascript' })
-      this.workerBlobUrl = this.createObjectURL(blob)
-    }
-    return this.workerBlobUrl
-  }
-
-  /**
-   * Forget a released URL so a later initialization creates a fresh Blob URL.
-   *
-   * The caller remains responsible for calling `URL.revokeObjectURL`.
-   *
-   * @param {string} url Released object URL.
-   * @returns {void}
-   */
-  releaseWorkerBlobUrl(url) {
-    if (this.workerBlobUrl === url) {
-      this.workerBlobUrl = null
-    }
   }
 }
 
