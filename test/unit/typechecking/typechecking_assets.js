@@ -8,10 +8,10 @@ import { assert } from 'chai'
 import { TypecheckingAssets } from '../../../src/typechecking/typechecking_assets.js'
 
 const manifest = {
-    default: 'esp32',
+    default: 'test-board',
     boards: [
-        { id: 'esp32', file: 'stubs-esp32.zip', package: 'esp32-stubs' },
-        { id: 'cpython', file: null, package: 'No Stubs' },
+        { id: 'test-board', file: 'stubs-test-board.zip', package: 'test-board-stubs' },
+        { id: 'no-stubs', file: null, package: 'No Stubs' },
     ],
 }
 
@@ -55,40 +55,38 @@ describe('TypecheckingAssets', () => {
     it('loads the manifest and defers the selected fallback archive to the worker', async () => {
         const requests = []
         const assets = new TypecheckingAssets({
+            packageBase: 'https://example.test/assets/pyright-worker/',
             fetch: async url => {
                 requests.push(url)
                 return response({ json: manifest })
-            },
-            Blob: class FakeBlob {
-                constructor(parts, options) {
-                    this.parts = parts
-                    this.type = options.type
-                }
-            },
-            createObjectURL: blob => {
-                assert.include(blob.parts[0], 'pyright-worker-v0.2.6')
-                return 'blob:worker'
             },
         })
 
         const runtime = await assets.prepare()
 
-        assert.strictEqual(runtime.workerUrl, 'blob:worker')
-        assert.strictEqual(runtime.workerBlobUrl, 'blob:worker')
+        assert.strictEqual(
+            runtime.workerUrl,
+            'https://example.test/assets/pyright-worker/dist/pyright_worker.js',
+        )
         assert.isUndefined(runtime.boardStubs)
-        assert.match(runtime.boardStubsUrl, /stubs-esp32\.zip$/)
+        assert.strictEqual(
+            runtime.boardStubsUrl,
+            'https://example.test/assets/pyright-worker/assets/stubs-test-board.zip',
+        )
         assert.deepEqual(runtime.boardStubPackage, {
-            packageName: 'esp32-stubs',
+            packageName: 'test-board-stubs',
             fallbackToBundled: true,
         })
-        assert.strictEqual(runtime.stubBundle.id, 'esp32')
+        assert.strictEqual(runtime.stubBundle.id, 'test-board')
         assert.lengthOf(requests, 1)
-        assert.match(requests[0], /pyright-worker-v0\.2\.6.*stubs-manifest\.json$/)
+        assert.strictEqual(
+            requests[0],
+            'https://example.test/assets/pyright-worker/assets/stubs-manifest.json',
+        )
     })
 
-    it('creates one worker Blob URL and caches immutable assets', async () => {
+    it('uses one same-origin worker URL and caches package metadata', async () => {
         let fetchCalls = 0
-        let blobUrls = 0
         const assets = new TypecheckingAssets({
             fetch: async url => {
                 fetchCalls++
@@ -96,27 +94,25 @@ describe('TypecheckingAssets', () => {
                     ? response({ json: manifest })
                     : response({ bytes: new ArrayBuffer(1) })
             },
-            createObjectURL: () => `blob:worker-${++blobUrls}`,
         })
 
-        const first = await assets.prepare('esp32')
-        const second = await assets.prepare('esp32')
+        const first = await assets.prepare('test-board')
+        const second = await assets.prepare('test-board')
 
         assert.strictEqual(first.workerUrl, second.workerUrl)
-        assert.strictEqual(blobUrls, 1)
+        assert.match(first.workerUrl, /assets\/pyright-worker\/dist\/pyright_worker\.js$/)
         assert.strictEqual(fetchCalls, 1)
     })
 
     it('uses false for a manifest entry without a stub archive', async () => {
         const assets = new TypecheckingAssets({
             fetch: async () => response({ json: manifest }),
-            createObjectURL: () => 'blob:worker',
         })
 
-        const runtime = await assets.prepare('cpython')
+        const runtime = await assets.prepare('no-stubs')
 
         assert.isFalse(runtime.boardStubs)
-        assert.strictEqual(runtime.stubBundle.id, 'cpython')
+        assert.strictEqual(runtime.stubBundle.id, 'no-stubs')
     })
 
     it('reports unknown boards and failed asset responses', async () => {

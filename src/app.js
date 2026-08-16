@@ -345,7 +345,7 @@ async function applyTypecheckingSetting(enabled) {
 
     await typechecking.initialize(currentTypecheckingConfig())
     await syncConnectedTypecheckingWorkspace()
-    void refreshTypecheckingStubPackages().
+    await refreshTypecheckingStubPackages().
         catch(err => report('Unable to load current type-stub packages', err))
 }
 

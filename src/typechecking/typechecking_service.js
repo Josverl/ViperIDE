@@ -26,7 +26,6 @@ const MICROPYTHON_STUB_TARGETS = new Set(['esp32', 'rp2', 'stm32', 'samd', 'weba
  *   workspaceDiagnosticsSubscription?: {destroy: () => void}|null}>} [switchBoard]
  * @property {(config: object) => Promise<object>} [prepareRuntime]
  *   Resolves host configuration to a worker URL and selected stub bundle.
- * @property {(url: string) => void} [revokeObjectURL] Worker Blob URL cleanup hook.
  */
 
 /**
@@ -88,7 +87,6 @@ export class TypecheckingService {
     notifyDocumentClose = null,
     switchBoard = null,
     prepareRuntime = null,
-    revokeObjectURL = URL.revokeObjectURL.bind(URL),
   }) {
     if (typeof createLSPClient !== 'function') {
       throw new TypeError('TypecheckingService requires createLSPClient')
@@ -100,11 +98,9 @@ export class TypecheckingService {
     this.notifyDocumentClose = notifyDocumentClose
     this.switchBoard = switchBoard
     this.prepareRuntime = prepareRuntime
-    this.revokeObjectURL = revokeObjectURL
     this.client = null
     this.transport = null
     this.workspaceDiagnosticsSubscription = null
-    this.workerBlobUrl = null
     this.selectedStubBundle = null
     this.documentVersions = new Map()
     this.diagnosticStatus = new Map()
@@ -151,7 +147,6 @@ export class TypecheckingService {
       if (!runtimeConfig.workerUrl) {
         throw new TypeError('TypecheckingService requires config.workerUrl')
       }
-      this.workerBlobUrl = runtimeConfig.workerBlobUrl || null
       this.selectedStubBundle = runtimeConfig.stubBundle || null
       this.clientConfig = {
         ...config,
@@ -159,7 +154,6 @@ export class TypecheckingService {
         onWorkspaceDiagnosticsChange: diagnostics => this.setWorkspaceDiagnosticStatus(diagnostics),
       }
       if (generation !== this.generation || this.status === 'disposed') {
-        this.releaseWorkerBlob()
         throw new Error('TypecheckingService was disposed during initialization')
       }
       return this.createLSPClient(this.clientConfig)
@@ -810,7 +804,6 @@ export class TypecheckingService {
     this.diagnosticStatus.clear()
     this.editorBindings.clear()
     this.workspaceFiles.clear()
-    this.releaseWorkerBlob()
     this.statusListeners.clear()
   }
 
@@ -833,12 +826,5 @@ export class TypecheckingService {
     this.transport = null
     this.documentVersions.clear()
     this.diagnosticStatus.clear()
-    this.releaseWorkerBlob()
-  }
-
-  releaseWorkerBlob() {
-    if (!this.workerBlobUrl) { return }
-    this.revokeObjectURL(this.workerBlobUrl)
-    this.workerBlobUrl = null
   }
 }

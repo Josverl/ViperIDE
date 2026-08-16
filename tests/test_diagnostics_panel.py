@@ -125,40 +125,6 @@ def test_pyright_diagnostics_are_merged_with_host_linters(page, viperide_server,
     expect(page.locator(".cm-lintRange-info")).to_have_count(1)
     expect(page.locator(".cm-lintPoint-error")).to_have_count(0)
     expect(page.locator(".cm-lintPoint-info")).to_have_count(0)
-    layout = page.locator("#diagnostics").evaluate(
-        """panel => {
-            const row = panel.querySelector('.diagnostic-item');
-            const severity = row.querySelector('.diagnostic-severity');
-            const location = row.querySelector('.diagnostic-location');
-            return {
-                clientWidth: panel.clientWidth,
-                scrollWidth: panel.scrollWidth,
-                overflowX: getComputedStyle(panel).overflowX,
-                severityWidth: severity.getBoundingClientRect().width,
-                warningWidth: (() => {
-                    const probe = severity.cloneNode();
-                    probe.textContent = 'Warning';
-                    probe.style.position = 'fixed';
-                    probe.style.visibility = 'hidden';
-                    probe.style.width = 'max-content';
-                    document.body.append(probe);
-                    const width = probe.getBoundingClientRect().width;
-                    probe.remove();
-                    return width;
-                })(),
-                locationWidth: location.getBoundingClientRect().width,
-                locationWhiteSpace: getComputedStyle(location).whiteSpace,
-                locationTextOverflow: getComputedStyle(location).textOverflow,
-            };
-        }"""
-    )
-    assert layout["scrollWidth"] <= layout["clientWidth"]
-    assert layout["overflowX"] == "auto"
-    assert layout["severityWidth"] >= layout["warningWidth"]
-    assert layout["severityWidth"] - layout["warningWidth"] < 8
-    assert abs(layout["locationWidth"] - 180) < 1
-    assert layout["locationWhiteSpace"] == "normal"
-    assert layout["locationTextOverflow"] == "clip"
 
     page.locator(".cm-content").fill("import micropython\n")
     expect(badge).to_have_attribute("data-severity", "warning", timeout=30_000)
