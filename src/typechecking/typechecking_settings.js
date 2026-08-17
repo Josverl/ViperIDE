@@ -8,6 +8,7 @@ import { stubTargetForDevice } from './typechecking_service.js'
 export const DEFAULT_TYPECHECKING_MODE = 'standard'
 export const DEFAULT_TYPECHECKING_SCOPE = 'openFilesOnly'
 export const AUTO_TYPECHECKING_BOARD = 'auto'
+export const MICROPYTHON_TYPESHED_PATH = '/typeshed-micropython'
 
 const TYPECHECKING_MODES = new Set(['basic', 'standard', 'strict'])
 const TYPECHECKING_SCOPES = new Set(['openFilesOnly', 'workspace'])
@@ -114,7 +115,7 @@ export function typecheckingBoardOptions(manifest, installedPackages = []) {
  * Convert persisted ViperIDE settings to reusable LSP client configuration.
  *
  * @param {object} settings Runtime settings.
- * @returns {{extraPaths: string[], diagnosticMode: string, typeCheckingMode: string, boardId?: string}}
+ * @returns {{extraPaths: string[], diagnosticMode: string, typeCheckingMode: string, typeshedPath: string, boardId?: string}}
  */
 export function typecheckingRuntimeConfig({ mode, scope, board, devInfo, extraPaths = [] }) {
     const boardId = resolveTypecheckingBoard(board, devInfo)
@@ -122,6 +123,8 @@ export function typecheckingRuntimeConfig({ mode, scope, board, devInfo, extraPa
         extraPaths,
         diagnosticMode: normalizeTypecheckingScope(scope),
         typeCheckingMode: normalizeTypecheckingMode(mode),
+        // MicroPython stdlib stubs; the client would otherwise default to CPython typeshed.
+        typeshedPath: MICROPYTHON_TYPESHED_PATH,
         ...(boardId ? { boardId } : {}),
     }
 }
