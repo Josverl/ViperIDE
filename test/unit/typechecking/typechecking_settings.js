@@ -92,6 +92,14 @@ describe('type-checking settings', () => {
             diagnosticMode: 'openFilesOnly',
             boardId: 'rp2',
             extraPaths: ['/workspace/lib'],
+            typeshedPath: '/typeshed-micropython',
         })
+    })
+
+    it('always selects the MicroPython stdlib stubs over the CPython typeshed', () => {
+        for (const board of ['auto', 'rp2', 'esp32']) {
+            const config = typecheckingRuntimeConfig({ mode: 'standard', board })
+            assert.strictEqual(config.typeshedPath, '/typeshed-micropython')
+        }
     })
 })
