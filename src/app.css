@@ -269,7 +269,8 @@ body.loaded {
 
 .diagnostic-item {
     display: grid;
-    grid-template-columns: 4.6em minmax(6em, 8.5em) minmax(0, 1fr) minmax(0, 9em);
+    grid-template-areas: "severity location message source";
+    grid-template-columns: 4.6em minmax(10em, 14em) minmax(0, 1fr) minmax(12em, 16em);
     gap: 0.7em;
     box-sizing: border-box;
     min-width: 0;
@@ -287,6 +288,7 @@ body.loaded {
 }
 
 .diagnostic-severity {
+    grid-area: severity;
     text-transform: capitalize;
     white-space: nowrap;
 }
@@ -311,25 +313,33 @@ body.loaded {
 }
 
 .diagnostic-location {
+    grid-area: location;
+    overflow: hidden;
+    text-overflow: ellipsis;
     white-space: nowrap;
 }
 
-.diagnostic-location,
 .diagnostic-message {
+    grid-area: message;
     overflow-wrap: anywhere;
 }
 
 .diagnostic-source {
-    overflow-wrap: anywhere;
+    grid-area: source;
+    overflow: hidden;
     justify-self: right;
+    max-width: 100%;
     text-align: right;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
-@media (max-width: 560px) {
+@media (max-width: 700px) {
     .diagnostic-item {
-        grid-template-columns: 4.1em minmax(5.6em, 7.4em) minmax(0, 1fr) minmax(0, 7em);
-        min-width: 22rem;
-        width: 100%;
+        grid-template-areas:
+            "severity location source"
+            ". message message";
+        grid-template-columns: 4.1em minmax(0, 1fr) minmax(8em, 12em);
     }
 
     .diagnostic-source {
