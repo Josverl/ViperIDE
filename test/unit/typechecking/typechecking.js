@@ -217,6 +217,24 @@ describe('TypecheckingService', () => {
         })
     })
 
+    it('forwards catalog filters through the published transport API', async () => {
+        const result = resources()
+        const filters = { family: 'micropython', version: '1.28.0', port: 'rp2' }
+        result.transport.getStubPackageCatalog = async received => ({
+            packages: [{ packageName: 'micropython-rp2-stubs' }],
+            availableRuntimeVersions: ['1.28.0'],
+            defaultRuntimeVersion: '1.28.0',
+            received,
+        })
+        result.transport.listStubPackages = async received => [{ received }]
+        const service = new TypecheckingService({ createLSPClient: async () => result })
+        await service.initialize({ workerUrl: 'blob:worker' })
+
+        const catalog = await service.getStubPackageCatalog(filters)
+        assert.deepEqual(catalog.received, filters)
+        assert.deepEqual(await service.listStubPackages(filters), [{ received: filters }])
+    })
+
     it('retries read-only stub package queries after worker replacement', async () => {
         const first = resources()
         const second = resources()

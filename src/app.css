@@ -622,9 +622,25 @@ body.loaded {
     line-height: 1.2em;
 }
 
+#menu-settings-list [data-advanced-mode][hidden] {
+    display: none;
+}
+
 #menu-settings-list .typecheck-select {
     text-align: right;
     text-align-last: right;
+    max-width: 62%;
+}
+
+#typecheck-stub-selected-package {
+    width: 62%;
+    min-width: 0;
+    padding: 2px 4px;
+    color: var(--fg-color);
+    background: var(--bg-color-edit);
+    border: 1px solid #cccccc88;
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
 }
 
 #typecheck-stub-package {

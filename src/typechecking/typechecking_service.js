@@ -563,8 +563,18 @@ export class TypecheckingService {
    *
    * @returns {Promise<object[]>} Worker package catalog.
    */
-  listStubPackages() {
-    return this.runStubPackageQuery(transport => transport.listStubPackages())
+  listStubPackages(filters = {}) {
+    return this.runStubPackageQuery(transport => transport.listStubPackages(filters))
+  }
+
+  /**
+   * Query catalog packages together with available and default runtime versions.
+   *
+   * @param {{family?: string, version?: string, port?: string, board?: string}} [filters={}]
+   * @returns {Promise<object>} Published worker package catalog response.
+   */
+  getStubPackageCatalog(filters = {}) {
+    return this.runStubPackageQuery(transport => transport.getStubPackageCatalog(filters))
   }
 
   /**

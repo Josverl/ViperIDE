@@ -35,11 +35,8 @@ import { parseStackTrace, validatePython, disassembleMPY, minifyPython, prettify
 import { createBrowserVM, SYSTEM_DIRS } from './emulator.js'
 import { getSetting, onSettingChange, updateSetting } from './settings.js'
 import {
-    normalizeTypecheckingBoard,
+    catalogTypecheckingRuntimeConfig,
     parseStubPackageSpecifier,
-    resolveTypecheckingBoard,
-    typecheckingBoardOptions,
-    typecheckingRuntimeConfig,
 } from './typechecking/typechecking_settings.js'
 import { renderMarkdown } from './markdown.js'
 
@@ -56,7 +53,7 @@ import fsCache from './fs_cache.js'
 import { createZipSync } from './zip.js'
 
 import { initControlClient } from './control_client.js'
-import { loadTypecheckingStubManifest, typechecking } from './typechecking/typechecking.js'
+import { typechecking } from './typechecking/typechecking.js'
 import { collectDiagnosticEntries, renderTypecheckingStatus } from './typechecking/typechecking_status.js'
 import {
     shouldMirrorDevicePythonWorkspace,
@@ -140,6 +137,8 @@ let intentionalDisconnect = false
 const typecheckingExtraPaths = ['/workspace/lib']
 let typecheckingAction = Promise.resolve()
 let diagnosticsFilters = normalizeDiagnosticsFilters()
+let selectedTypecheckingStubPackage = null
+let syncingTypecheckingStubSelectors = false
 
 const isBusyState = () => deviceState === 'busy-initial' || deviceState === 'busy-running'
 const portReady = () => !!port && deviceState === 'ready'
@@ -208,6 +207,15 @@ function updateTypecheckingUI(snapshot = typechecking.snapshot()) {
     QID('typecheck-stub-package').disabled = !packageControlsEnabled
     QID('typecheck-stub-install').disabled = !packageControlsEnabled
     QID('typecheck-stub-clear').disabled = !packageControlsEnabled
+    for (const id of [
+        'typecheck-stub-family',
+        'typecheck-stub-version',
+        'typecheck-stub-port',
+        'typecheck-stub-board',
+    ]) {
+        QID(id).disabled = snapshot.status !== 'ready'
+    }
+    updateTypecheckingStubApplicability()
     if (!getSetting('typecheck-enabled')) {
         setTypecheckingStubStatus('Enable type checking to view or manage cached stub packages.')
     }
@@ -267,15 +275,76 @@ async function jumpToDiagnostic(path, line, character) {
     if (view) { goToDocumentPosition(view, line, character) }
 }
 
-async function updateTypecheckingBoardOptions(installedPackages = []) {
-    const select = QID('typecheck-stubs')
-    const manifest = await loadTypecheckingStubManifest()
-    const selected = normalizeTypecheckingBoard(getSetting('typecheck-stubs'))
-    select.replaceChildren(new Option('Automatic', 'auto'))
-    for (const board of typecheckingBoardOptions(manifest, installedPackages)) {
-        select.add(new Option(board.label, board.id))
-    }
+function replaceTypecheckingStubOptions(id, values, preferred, emptyLabel = T('settings.typecheck-stub-not-applicable')) {
+    const select = QID(id)
+    const options = values.length ? values : ['']
+    select.replaceChildren(...options.map(value => new Option(value || emptyLabel, value)))
+    const selected = values.includes(preferred) ? preferred : (values[0] || '')
     select.value = selected
+    if (getSetting(id) !== selected) { updateSetting(id, selected) }
+    return selected
+}
+
+function typecheckingStubValues(packages, key) {
+    return [...new Set(packages.map(entry => entry[key]).filter(Boolean))].sort()
+}
+
+function updateTypecheckingStubApplicability() {
+    const applicable = getSetting('typecheck-stub-family') !== 'circuitpython'
+    const ready = typechecking.snapshot().status === 'ready'
+    for (const id of ['typecheck-stub-version', 'typecheck-stub-port', 'typecheck-stub-board']) {
+        QID(id).disabled = !ready || !applicable
+    }
+}
+
+async function updateTypecheckingStubSelectors() {
+    const family = getSetting('typecheck-stub-family') === 'circuitpython'
+        ? 'circuitpython'
+        : 'micropython'
+    syncingTypecheckingStubSelectors = true
+    try {
+        const catalog = await typechecking.getStubPackageCatalog({ family })
+        const versions = family === 'micropython' ? catalog.availableRuntimeVersions : []
+        const version = replaceTypecheckingStubOptions(
+            'typecheck-stub-version',
+            versions,
+            getSetting('typecheck-stub-version') || catalog.defaultRuntimeVersion,
+        )
+        const familyFilters = { family, ...(version ? { version } : {}) }
+        const portPackages = await typechecking.listStubPackages(familyFilters)
+        const ports = family === 'micropython' ? typecheckingStubValues(portPackages, 'port') : []
+        const port = replaceTypecheckingStubOptions(
+            'typecheck-stub-port',
+            ports,
+            getSetting('typecheck-stub-port'),
+        )
+        const boardPackages = await typechecking.listStubPackages({
+            ...familyFilters,
+            ...(port ? { port } : {}),
+        })
+        const boards = family === 'micropython' ? typecheckingStubValues(boardPackages, 'board') : []
+        const preferredBoard = boards.includes(getSetting('typecheck-stub-board'))
+            ? getSetting('typecheck-stub-board')
+            : (boards.includes('GENERIC') ? 'GENERIC' : boards[0])
+        const board = replaceTypecheckingStubOptions('typecheck-stub-board', boards, preferredBoard)
+        const packages = await typechecking.listStubPackages({
+            ...familyFilters,
+            ...(port ? { port } : {}),
+            ...(board ? { board } : {}),
+        })
+        const target = packages[0] || null
+        selectedTypecheckingStubPackage = target ? {
+            packageName: target.packageName,
+            version: target.installedVersion || target.latestVersion,
+        } : null
+        QID('typecheck-stub-selected-package').value = selectedTypecheckingStubPackage
+            ? `${selectedTypecheckingStubPackage.packageName}${selectedTypecheckingStubPackage.version ? `==${selectedTypecheckingStubPackage.version}` : ''}`
+            : ''
+        updateTypecheckingStubApplicability()
+        return catalog.packages
+    } finally {
+        syncingTypecheckingStubSelectors = false
+    }
 }
 
 function setTypecheckingStubStatus(message) {
@@ -283,10 +352,8 @@ function setTypecheckingStubStatus(message) {
 }
 
 async function refreshTypecheckingStubPackages() {
-    const [catalog, installed] = await Promise.all([
-        typechecking.listStubPackages(),
-        typechecking.listInstalledStubPackages(),
-    ])
+    const catalog = await updateTypecheckingStubSelectors()
+    const installed = await typechecking.listInstalledStubPackages()
     const dataList = QID('typecheck-stub-catalog')
     dataList.replaceChildren()
     for (const stubPackage of catalog) {
@@ -299,7 +366,6 @@ async function refreshTypecheckingStubPackages() {
             dataList.appendChild(option)
         }
     }
-    await updateTypecheckingBoardOptions(installed)
     const active = installed.filter(entry => entry.active)
     setTypecheckingStubStatus(active.length
         ? `Cached: ${active.map(entry => `${entry.packageName}@${entry.version}`).join(', ')}`
@@ -344,17 +410,21 @@ async function applyTypecheckingSetting(enabled) {
     }
 
     await typechecking.initialize(currentTypecheckingConfig())
-    await syncConnectedTypecheckingWorkspace()
     await refreshTypecheckingStubPackages().
         catch(err => report('Unable to load current type-stub packages', err))
+    if (selectedTypecheckingStubPackage) {
+        await typechecking.restartRuntime(currentTypecheckingConfig())
+    }
+    await syncConnectedTypecheckingWorkspace()
 }
 
 function currentTypecheckingConfig() {
-    return typecheckingRuntimeConfig({
+    return catalogTypecheckingRuntimeConfig({
         mode: getSetting('typecheck-mode'),
         scope: getSetting('typecheck-scope'),
-        board: getSetting('typecheck-stubs'),
-        devInfo,
+        family: getSetting('typecheck-stub-family'),
+        port: getSetting('typecheck-stub-port'),
+        stubPackage: selectedTypecheckingStubPackage,
         extraPaths: typecheckingExtraPaths,
     })
 }
@@ -367,31 +437,23 @@ function queueTypecheckingSetting(enabled) {
 }
 
 function queueTypecheckingDeviceSelection() {
-    typecheckingAction = typecheckingAction.
-        then(() => {
-            if (!getSetting('typecheck-enabled')) { return }
-            const boardId = resolveTypecheckingBoard(getSetting('typecheck-stubs'), devInfo)
-            if (!boardId) { return }
-            return typechecking.selectStubBundle(boardId)
-        }).
-        catch(err => report('Unable to select type-checking stubs', err))
-    return typecheckingAction
+    return queueTypecheckingReconfiguration()
 }
 
-function queueTypecheckingReconfiguration({ syncWorkspace = false } = {}) {
+async function applyTypecheckingReconfiguration({ syncWorkspace = false } = {}) {
+    if (!getSetting('typecheck-enabled')) { return }
+    const status = typechecking.snapshot().status
+    if (status !== 'idle' && status !== 'disabled') {
+        await typechecking.restartRuntime(currentTypecheckingConfig())
+    } else {
+        await typechecking.initialize(currentTypecheckingConfig())
+    }
+    if (syncWorkspace) { await syncConnectedTypecheckingWorkspace() }
+}
+
+function queueTypecheckingReconfiguration(options = {}) {
     typecheckingAction = typecheckingAction.
-        then(async () => {
-            if (!getSetting('typecheck-enabled')) { return }
-            const status = typechecking.snapshot().status
-            if (status !== 'idle' && status !== 'disabled') {
-                await typechecking.restartRuntime(currentTypecheckingConfig())
-            } else {
-                await typechecking.initialize(currentTypecheckingConfig())
-            }
-            if (syncWorkspace) {
-                await syncConnectedTypecheckingWorkspace()
-            }
-        }).
+        then(() => applyTypecheckingReconfiguration(options)).
         catch(err => report('Unable to apply type-checking settings', err))
     return typecheckingAction
 }
@@ -2484,7 +2546,11 @@ export function applyTranslation() {
         QS('label[for=typecheck-enabled]').innerText = T('settings.typecheck-enabled')
         QS('label[for=typecheck-mode]').innerText = T('settings.typecheck-mode')
         QS('label[for=typecheck-scope]').innerText = T('settings.typecheck-scope')
-        QS('label[for=typecheck-stubs]').innerText = T('settings.typecheck-stubs')
+        QS('label[for=typecheck-stub-family]').innerText = T('settings.typecheck-stub-family')
+        QS('label[for=typecheck-stub-version]').innerText = T('settings.typecheck-stub-version')
+        QS('label[for=typecheck-stub-port]').innerText = T('settings.typecheck-stub-port')
+        QS('label[for=typecheck-stub-board]').innerText = T('settings.typecheck-stub-board')
+        QS('label[for=typecheck-stub-selected-package]').innerText = T('settings.typecheck-stub-selected-package')
         QS('label[for=typecheck-stub-package]').innerText = T('settings.typecheck-stub-package')
         QS('label[for=use-natural-sort]').innerText = T('settings.use-natural-sort')
 
@@ -2635,12 +2701,24 @@ function showOfflineReadyToast(version) {
     })
 
     typechecking.onStatusChange(updateTypecheckingUI)
-    updateTypecheckingBoardOptions().catch(err => report('Unable to load type-stub versions', err))
     onSettingChange('typecheck-enabled', queueTypecheckingSetting)
     onSettingChange('typecheck-mode', queueTypecheckingReconfiguration)
     onSettingChange('typecheck-scope', () =>
         queueTypecheckingReconfiguration({ syncWorkspace: true }))
-    onSettingChange('typecheck-stubs', queueTypecheckingReconfiguration)
+    for (const id of [
+        'typecheck-stub-family',
+        'typecheck-stub-version',
+        'typecheck-stub-port',
+        'typecheck-stub-board',
+    ]) {
+        onSettingChange(id, () => {
+            if (syncingTypecheckingStubSelectors) { return }
+            typecheckingAction = typecheckingAction.
+                then(updateTypecheckingStubSelectors).
+                then(() => applyTypecheckingReconfiguration()).
+                catch(err => report('Unable to select type stubs', err))
+        })
+    }
     QID('typecheck-stub-install').addEventListener('click', () => {
         typecheckingAction = typecheckingAction.
             then(installTypecheckingStubPackage).

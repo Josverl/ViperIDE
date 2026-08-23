@@ -115,6 +115,28 @@ describe('TypecheckingAssets', () => {
         assert.strictEqual(runtime.stubBundle.id, 'no-stubs')
     })
 
+    it('forwards a selected published package while retaining the bundled fallback', async () => {
+        const assets = new TypecheckingAssets({
+            fetch: async () => response({ json: manifest }),
+        })
+
+        const runtime = await assets.prepare({
+            boardId: 'test-board',
+            boardStubPackage: {
+                packageName: 'micropython-test-board-stubs',
+                version: '1.28.0.post2',
+                fallbackToBundled: true,
+            },
+        })
+
+        assert.deepEqual(runtime.boardStubPackage, {
+            packageName: 'micropython-test-board-stubs',
+            version: '1.28.0.post2',
+            fallbackToBundled: true,
+        })
+        assert.match(runtime.boardStubsUrl, /stubs-test-board\.zip$/)
+    })
+
     it('reports unknown boards and failed asset responses', async () => {
         const assets = new TypecheckingAssets({
             fetch: async () => response({ json: manifest }),

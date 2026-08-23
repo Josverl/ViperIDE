@@ -49,12 +49,12 @@ export class TypecheckingAssets {
       workerUrl: `${this.packageBase}dist/pyright_worker.js`,
       boardStubs: board.file ? undefined : false,
       ...(board.file ? { boardStubsUrl: `${this.packageBase}assets/${board.file}` } : {}),
-      ...(board.file && board.package
+      ...(config.boardStubPackage || (board.file && board.package)
         ? {
-            boardStubPackage: {
-              packageName: board.package,
-              fallbackToBundled: true,
-            },
+            boardStubPackage: config.boardStubPackage || {
+                packageName: board.package,
+                fallbackToBundled: true,
+              },
           }
         : {}),
       stubBundle: Object.freeze({ ...board }),
