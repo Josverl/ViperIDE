@@ -6,6 +6,7 @@
 import { assert } from 'chai'
 
 import {
+    catalogTypecheckingRuntimeConfig,
     normalizeTypecheckingBoard,
     normalizeTypecheckingMode,
     normalizeTypecheckingScope,
@@ -101,5 +102,30 @@ describe('type-checking settings', () => {
             const config = typecheckingRuntimeConfig({ mode: 'standard', board })
             assert.strictEqual(config.typeshedPath, '/typeshed-micropython')
         }
+    })
+
+    it('builds runtime configuration from a published catalog package', () => {
+        assert.deepEqual(catalogTypecheckingRuntimeConfig({
+            mode: 'strict',
+            scope: 'workspace',
+            family: 'micropython',
+            port: 'esp32',
+            stubPackage: {
+                packageName: 'micropython-esp32-esp32-generic-c3-stubs',
+                version: '1.28.0.post2',
+            },
+            extraPaths: ['/workspace/lib'],
+        }), {
+            typeCheckingMode: 'strict',
+            diagnosticMode: 'workspace',
+            boardId: 'esp32',
+            boardStubPackage: {
+                packageName: 'micropython-esp32-esp32-generic-c3-stubs',
+                version: '1.28.0.post2',
+                fallbackToBundled: true,
+            },
+            extraPaths: ['/workspace/lib'],
+            typeshedPath: '/typeshed-micropython',
+        })
     })
 })

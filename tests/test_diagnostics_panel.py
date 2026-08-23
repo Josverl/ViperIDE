@@ -85,9 +85,7 @@ def test_pyright_diagnostics_are_merged_with_host_linters(page, viperide_server,
     page.goto(f"{viperide_server}/?vm=1", wait_until="domcontentloaded")
 
     typecheck_tab = page.locator("#typecheck-tab")
-    expect(typecheck_tab).to_have_attribute(
-        "title", re.compile(r"standard mode with webassembly stubs"), timeout=90_000
-    )
+    expect(typecheck_tab).to_have_attribute("title", re.compile(r"standard mode with esp32 stubs"), timeout=90_000)
 
     page.locator(".cm-content").fill(
         "from typing_extensions import reveal_type\n"

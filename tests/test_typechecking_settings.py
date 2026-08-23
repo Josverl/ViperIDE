@@ -3,7 +3,7 @@ import re
 from playwright.sync_api import expect
 
 
-def test_typechecking_mode_and_board_override_persist(page, viperide_server, tmp_path):
+def test_typechecking_mode_and_stub_selection_persist(page, viperide_server, tmp_path):
     console_errors = []
     page.on("console", lambda message: console_errors.append(message.text) if message.type == "error" else None)
     page.on("dialog", lambda dialog: dialog.dismiss())
@@ -21,34 +21,48 @@ def test_typechecking_mode_and_board_override_persist(page, viperide_server, tmp
     status = page.locator("#typecheck-tab")
     mode = page.locator("#typecheck-mode")
     scope = page.locator("#typecheck-scope")
-    board = page.locator("#typecheck-stubs")
+    family = page.locator("#typecheck-stub-family")
+    version = page.locator("#typecheck-stub-version")
+    port = page.locator("#typecheck-stub-port")
+    board = page.locator("#typecheck-stub-board")
+    package = page.locator("#typecheck-stub-selected-package")
+    package_row = page.locator(".typecheck-package-info")
+    advanced_mode = page.locator("#advanced-mode")
     editor = page.locator(".cm-content")
     settings_tab = page.locator('[data-target="menu-settings"]')
 
     expect(status).to_have_attribute("data-state", "ready", timeout=90_000)
-    expect(status).to_have_attribute("title", re.compile(r"standard mode with webassembly stubs"))
+    expect(status).to_have_attribute("title", re.compile(r"standard mode with esp32 stubs"))
     assert page.evaluate("JSON.parse(localStorage.getItem('settings'))['typecheck-mode']") == "standard"
     assert page.evaluate("JSON.parse(localStorage.getItem('settings'))['typecheck-scope']") == "openFilesOnly"
-    assert page.evaluate("JSON.parse(localStorage.getItem('settings'))['typecheck-stubs']") == "auto"
 
     settings_tab.click()
     expect(mode).to_have_value("standard")
     expect(scope).to_have_value("openFilesOnly")
     expect(scope.locator("option[value=workspace]")).to_have_text("All")
     expect(scope.locator("option[value=openFilesOnly]")).to_have_text("Opened")
-    expect(board).to_have_value("auto")
-    expect(board.locator("option[value=auto]")).to_have_text("Automatic")
-    expect(board.locator("option")).to_have_count(7)
-    expect(board.locator("option[value=stdlib]")).to_have_count(0)
-    expect(board.locator("option[value=rp2]")).to_have_text("MP RP2 (v1.28.0)")
-    expect(board.locator("option[value=webassembly]")).to_have_text("MP WebAssembly (v1.28.0)")
+    expect(family).to_have_value("micropython")
+    expect(version).to_have_value("1.28.0")
+    expect(port).to_have_value("esp32")
+    expect(board).to_have_value("GENERIC")
+    expect(package).to_have_value(re.compile(r"^micropython-esp32-stubs=="))
+    expect(package_row).to_be_hidden()
+    advanced_mode.check()
+    expect(package_row).to_be_visible()
+    advanced_mode.uncheck()
+    expect(package_row).to_be_hidden()
     assert page.locator("#menu-line-other").evaluate(
         "(other) => Boolean(other.compareDocumentPosition("
         "document.querySelector('#menu-line-typechecking')) & Node.DOCUMENT_POSITION_FOLLOWING)"
     )
     expect(page.locator("#menu-line-typechecking")).to_have_text("Typechecking")
     expect(page.locator("#typecheck-stub-package-help")).to_have_count(0)
-    for dropdown in (mode, scope, board):
+    expect(page.locator("label[for=typecheck-stub-family]")).to_have_text("Family")
+    expect(page.locator("label[for=typecheck-stub-version]")).to_have_text("Version")
+    expect(page.locator("label[for=typecheck-stub-port]")).to_have_text("Port")
+    expect(page.locator("label[for=typecheck-stub-board]")).to_have_text("Board")
+    expect(page.locator("label[for=typecheck-stub-selected-package]")).to_have_text("Package")
+    for dropdown in (mode, scope, family, version, port, board):
         assert dropdown.evaluate("(element) => getComputedStyle(element).textAlign") == "right"
     for button_id in ("#typecheck-stub-install", "#typecheck-stub-clear"):
         button_style = page.locator(button_id).evaluate(
@@ -65,19 +79,24 @@ def test_typechecking_mode_and_board_override_persist(page, viperide_server, tmp
         assert button_style["borderWidth"] == "1px"
         assert button_style["fontSize"] < 14
     mode.select_option("strict")
-    expect(status).to_have_attribute("title", re.compile(r"strict mode with webassembly stubs"), timeout=90_000)
+    expect(status).to_have_attribute("title", re.compile(r"strict mode with esp32 stubs"), timeout=90_000)
 
-    board.select_option("rp2")
+    port.select_option("rp2")
     expect(status).to_have_attribute("title", re.compile(r"strict mode with rp2 stubs"), timeout=90_000)
+    board.select_option("RPI_PICO_W")
+    expect(package).to_have_value(re.compile(r"^micropython-rp2-rpi-pico-w-stubs=="), timeout=90_000)
     assert page.evaluate("JSON.parse(localStorage.getItem('settings'))['typecheck-mode']") == "strict"
-    assert page.evaluate("JSON.parse(localStorage.getItem('settings'))['typecheck-stubs']") == "rp2"
+    assert page.evaluate("JSON.parse(localStorage.getItem('settings'))['typecheck-stub-port']") == "rp2"
+    assert page.evaluate("JSON.parse(localStorage.getItem('settings'))['typecheck-stub-board']") == "RPI_PICO_W"
 
     page.reload(wait_until="domcontentloaded")
     expect(status).to_have_attribute("data-state", "ready", timeout=90_000)
     expect(status).to_have_attribute("title", re.compile(r"strict mode with rp2 stubs"))
     expect(mode).to_have_value("strict")
     expect(scope).to_have_value("openFilesOnly")
-    expect(board).to_have_value("rp2")
+    expect(port).to_have_value("rp2")
+    expect(board).to_have_value("RPI_PICO_W")
+    expect(package).to_have_value(re.compile(r"^micropython-rp2-rpi-pico-w-stubs=="))
 
     editor.fill("def identity(value):\n    return value\n")
     expect(page.locator("#diagnostics-badge")).not_to_be_empty(timeout=30_000)
@@ -94,7 +113,10 @@ def test_typechecking_mode_and_board_override_persist(page, viperide_server, tmp
 def test_typechecking_stub_packages_install_and_persist(page, viperide_server, tmp_path):
     page.add_init_script(
         """
-        localStorage.setItem('settings', JSON.stringify({'typecheck-enabled': true}));
+        localStorage.setItem('settings', JSON.stringify({
+            'typecheck-enabled': true,
+            'advanced-mode': true
+        }));
         """
     )
     page.goto(f"{viperide_server}/?vm=1", wait_until="domcontentloaded")

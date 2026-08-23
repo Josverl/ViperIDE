@@ -128,3 +128,34 @@ export function typecheckingRuntimeConfig({ mode, scope, board, devInfo, extraPa
         ...(boardId ? { boardId } : {}),
     }
 }
+
+/**
+ * Build runtime stub selection from a published catalog target.
+ *
+ * @param {object} settings Typechecking and selected package settings.
+ * @returns {object} Worker runtime configuration.
+ */
+export function catalogTypecheckingRuntimeConfig({
+    mode,
+    scope,
+    family,
+    port,
+    stubPackage,
+    extraPaths = [],
+}) {
+    const boardId = family === 'circuitpython' ? 'circuitpython' : port
+    return {
+        extraPaths,
+        diagnosticMode: normalizeTypecheckingScope(scope),
+        typeCheckingMode: normalizeTypecheckingMode(mode),
+        typeshedPath: MICROPYTHON_TYPESHED_PATH,
+        ...(boardId ? { boardId } : {}),
+        ...(stubPackage?.packageName ? {
+            boardStubPackage: {
+                packageName: stubPackage.packageName,
+                ...(stubPackage.version ? { version: stubPackage.version } : {}),
+                fallbackToBundled: true,
+            },
+        } : {}),
+    }
+}

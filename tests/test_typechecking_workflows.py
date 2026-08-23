@@ -13,7 +13,10 @@ def _configure_typechecking(page, **overrides):
         "typecheck-enabled": True,
         "typecheck-mode": "standard",
         "typecheck-scope": "workspace",
-        "typecheck-stubs": "auto",
+        "typecheck-stub-family": "micropython",
+        "typecheck-stub-version": "1.28.0",
+        "typecheck-stub-port": "esp32",
+        "typecheck-stub-board": "GENERIC",
         **overrides,
     }
     page.add_init_script(f"localStorage.setItem('settings', {json.dumps(json.dumps(settings))});")
@@ -41,10 +44,14 @@ def _pyright_rows(page, path):
     )
 
 
-def _expect_vm_typechecking_ready(page):
+def _expect_vm_typechecking_ready(page, stub_target="esp32"):
     status = page.locator("#typecheck-tab")
     expect(status).to_have_attribute("data-state", "ready", timeout=90_000)
-    expect(status).to_have_attribute("title", re.compile(r"standard mode with webassembly stubs"), timeout=90_000)
+    expect(status).to_have_attribute(
+        "title",
+        re.compile(rf"standard mode with {stub_target} stubs"),
+        timeout=90_000,
+    )
     return status
 
 
@@ -143,10 +150,16 @@ def test_local_imports_follow_changes_across_open_tabs(page, viperide_server, tm
 
 def test_dotted_completion_opens_on_every_first_trigger(page, viperide_server, tmp_path):
     console_errors = _console_errors(page)
-    _configure_typechecking(page, **{"typecheck-scope": "openFilesOnly"})
+    _configure_typechecking(
+        page,
+        **{
+            "typecheck-scope": "openFilesOnly",
+            "typecheck-stub-port": "webassembly",
+        },
+    )
     page.goto(f"{viperide_server}/?vm=1", wait_until="domcontentloaded")
 
-    _expect_vm_typechecking_ready(page)
+    _expect_vm_typechecking_ready(page, "webassembly")
     editor = page.locator(".editor-tab-pane.active .cm-content")
     autocomplete = page.locator(".cm-tooltip-autocomplete")
 
@@ -204,7 +217,7 @@ def test_fast_tab_switching_keeps_content_and_diagnostics_with_their_files(page,
     page.screenshot(path=tmp_path / "typechecking-fast-tab-switching.png")
 
 
-def test_connected_vm_auto_stubs_and_manual_stub_changes_reanalyze_open_files(page, viperide_server, tmp_path):
+def test_stub_port_changes_reanalyze_open_files(page, viperide_server, tmp_path):
     console_errors = _console_errors(page)
     _configure_typechecking(page, **{"typecheck-scope": "openFilesOnly"})
     page.goto(f"{viperide_server}/?vm=1", wait_until="domcontentloaded")
@@ -218,16 +231,16 @@ def test_connected_vm_auto_stubs_and_manual_stub_changes_reanalyze_open_files(pa
     expect(missing_rp2).to_have_count(1, timeout=30_000)
 
     page.locator('[data-target="menu-settings"]').click()
-    board = page.locator("#typecheck-stubs")
-    expect(board).to_have_value("auto")
-    board.select_option("rp2")
+    port = page.locator("#typecheck-stub-port")
+    expect(port).to_have_value("esp32")
+    port.select_option("rp2")
     expect(status).to_have_attribute("title", re.compile(r"standard mode with rp2 stubs"), timeout=90_000)
     expect(missing_rp2).to_have_count(0, timeout=30_000)
     expect(editor).to_contain_text("import rp2")
     page.screenshot(path=tmp_path / "typechecking-rp2-stubs-resolve-import.png")
 
-    board.select_option("auto")
-    expect(status).to_have_attribute("title", re.compile(r"standard mode with webassembly stubs"), timeout=90_000)
+    port.select_option("esp32")
+    expect(status).to_have_attribute("title", re.compile(r"standard mode with esp32 stubs"), timeout=90_000)
     expect(missing_rp2).to_have_count(1, timeout=30_000)
     expect(editor).to_contain_text("import rp2")
     assert console_errors == []

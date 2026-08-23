@@ -222,16 +222,27 @@
                         </select>
                     </div>
                     <div class="space-between">
-                        <label for="typecheck-stubs">Type stubs:</label>
-                        <select class="typecheck-select" id="typecheck-stubs">
-                            <option value="auto" selected>Automatic</option>
-                            <option value="esp32">MP ESP32</option>
-                            <option value="rp2">MP RP2</option>
-                            <option value="stm32">MP STM32</option>
-                            <option value="samd">MP SAMD</option>
-                            <option value="webassembly">MP WebAssembly</option>
+                        <label for="typecheck-stub-family">Family:</label>
+                        <select class="typecheck-select" id="typecheck-stub-family">
+                            <option value="micropython" selected>MicroPython</option>
                             <option value="circuitpython">CircuitPython</option>
                         </select>
+                    </div>
+                    <div class="space-between">
+                        <label for="typecheck-stub-version">Version:</label>
+                        <select class="typecheck-select" id="typecheck-stub-version"></select>
+                    </div>
+                    <div class="space-between">
+                        <label for="typecheck-stub-port">Port:</label>
+                        <select class="typecheck-select" id="typecheck-stub-port"></select>
+                    </div>
+                    <div class="space-between">
+                        <label for="typecheck-stub-board">Board:</label>
+                        <select class="typecheck-select" id="typecheck-stub-board"></select>
+                    </div>
+                    <div class="space-between typecheck-package-info" data-advanced-mode>
+                        <label for="typecheck-stub-selected-package">Package:</label>
+                        <input id="typecheck-stub-selected-package" type="text" readonly aria-readonly="true" />
                     </div>
                     <div data-advanced-mode>
                         <label for="typecheck-stub-package">Install type stubs from PyPI:</label>
