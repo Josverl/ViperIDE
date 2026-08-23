@@ -10,7 +10,7 @@ from shutil import copyfile as cp, copytree, rmtree
 # CI workflows set VIPER_IDE_BASE_URL explicitly for production builds.
 BASE_URL = os.environ.get("VIPER_IDE_BASE_URL")
 if not BASE_URL:
-    BASE_URL = os.environ["VIPER_IDE_BASE_URL"] = "http://localhost:10001"
+    BASE_URL = os.environ["VIPER_IDE_BASE_URL"] = "."
 
 def run(cmd):
     subprocess.run(cmd, shell=isinstance(cmd, str), check=True)

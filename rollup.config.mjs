@@ -10,9 +10,9 @@ import fs from 'fs'
 
 const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'))
 
-// build.py passes this via the environment. When running Rollup directly,
-// default to the local development server.
-const BASE_URL = process.env.VIPER_IDE_BASE_URL || 'http://localhost:10001'
+// build.py and deployment workflows can override this. Relative URLs keep local,
+// packaged, and MCP-served builds tied to the origin that serves the page.
+const BASE_URL = process.env.VIPER_IDE_BASE_URL || '.'
 // Package versions belong only in package.json/package-lock.json. This path deliberately
 // addresses the installed package without duplicating its version in build configuration.
 const PYRIGHT_WORKER_PACKAGE = 'node_modules/@mp-codemirror/pyright-worker'
