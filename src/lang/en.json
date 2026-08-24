@@ -43,6 +43,7 @@
             "typecheck-enabled": "Enable type checking",
             "typecheck-mode": "Typecheck mode",
             "typecheck-scope": "Typecheck files",
+            "typecheck-autodetect": "Autoselect stubs",
             "typecheck-stub-family": "Family",
             "typecheck-stub-version": "Version",
             "typecheck-stub-port": "Port",

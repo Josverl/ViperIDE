@@ -37,6 +37,8 @@ import { getSetting, onSettingChange, updateSetting } from './settings.js'
 import {
     catalogTypecheckingRuntimeConfig,
     parseStubPackageSpecifier,
+    typecheckingAutodetectFallback,
+    typecheckingStubPreferences,
 } from './typechecking/typechecking_settings.js'
 import { renderMarkdown } from './markdown.js'
 
@@ -139,6 +141,10 @@ let typecheckingAction = Promise.resolve()
 let diagnosticsFilters = normalizeDiagnosticsFilters()
 let selectedTypecheckingStubPackage = null
 let syncingTypecheckingStubSelectors = false
+// A selector change made while a refresh is in flight is remembered, not dropped,
+// so the final choice is honored with one extra pass instead of a stale mismatch.
+let pendingTypecheckingStubRefresh = false
+let typecheckingAutodetectNotice = ''
 
 const isBusyState = () => deviceState === 'busy-initial' || deviceState === 'busy-running'
 const portReady = () => !!port && deviceState === 'ready'
@@ -213,7 +219,7 @@ function updateTypecheckingUI(snapshot = typechecking.snapshot()) {
         'typecheck-stub-port',
         'typecheck-stub-board',
     ]) {
-        QID(id).disabled = snapshot.status !== 'ready'
+        QID(id).disabled = !['ready', 'error'].includes(snapshot.status)
     }
     updateTypecheckingStubApplicability()
     if (!getSetting('typecheck-enabled')) {
@@ -291,24 +297,57 @@ function typecheckingStubValues(packages, key) {
 
 function updateTypecheckingStubApplicability() {
     const applicable = getSetting('typecheck-stub-family') !== 'circuitpython'
-    const ready = typechecking.snapshot().status === 'ready'
+    const editable = ['ready', 'error'].includes(typechecking.snapshot().status)
+    const autodetect = getSetting('typecheck-autodetect')
+    QID('typecheck-stub-family').disabled = !editable || autodetect
     for (const id of ['typecheck-stub-version', 'typecheck-stub-port', 'typecheck-stub-board']) {
-        QID(id).disabled = !ready || !applicable
+        QID(id).disabled = !editable || !applicable || autodetect
     }
 }
 
 async function updateTypecheckingStubSelectors() {
-    const family = getSetting('typecheck-stub-family') === 'circuitpython'
+    let result
+    do {
+        pendingTypecheckingStubRefresh = false
+        result = await updateTypecheckingStubSelectorsOnce()
+    } while (pendingTypecheckingStubRefresh)
+    return result
+}
+
+async function updateTypecheckingStubSelectorsOnce() {
+    if (getSetting('typecheck-enabled') && typechecking.snapshot().status === 'error') {
+        await applyTypecheckingReconfiguration()
+    }
+    const autodetect = getSetting('typecheck-autodetect') && devInfo
+    const detectedFamily = String(devInfo?.family || '').toLowerCase()
+    const family = (autodetect ? detectedFamily : getSetting('typecheck-stub-family')) === 'circuitpython'
         ? 'circuitpython'
         : 'micropython'
     syncingTypecheckingStubSelectors = true
     try {
+        QID('typecheck-stub-family').value = family
+        if (getSetting('typecheck-stub-family') !== family) {
+            updateSetting('typecheck-stub-family', family)
+        }
         const catalog = await typechecking.getStubPackageCatalog({ family })
+        const preferences = autodetect
+            ? typecheckingStubPreferences(devInfo, catalog.packages, catalog.defaultRuntimeVersion)
+            : null
+        const fallback = preferences ? typecheckingAutodetectFallback(devInfo, preferences) : null
+        const fallbackKey = fallback?.message || ''
+        if (fallback && fallbackKey !== typecheckingAutodetectNotice) {
+            toastr[fallback.level](fallback.message, 'Type stubs')
+        }
+        typecheckingAutodetectNotice = fallbackKey
+        if (autodetect && family === 'micropython' && !preferences.port) {
+            updateTypecheckingStubApplicability()
+            return catalog.packages
+        }
         const versions = family === 'micropython' ? catalog.availableRuntimeVersions : []
         const version = replaceTypecheckingStubOptions(
             'typecheck-stub-version',
             versions,
-            getSetting('typecheck-stub-version') || catalog.defaultRuntimeVersion,
+            preferences?.version || getSetting('typecheck-stub-version') || catalog.defaultRuntimeVersion,
         )
         const familyFilters = { family, ...(version ? { version } : {}) }
         const portPackages = await typechecking.listStubPackages(familyFilters)
@@ -316,14 +355,16 @@ async function updateTypecheckingStubSelectors() {
         const port = replaceTypecheckingStubOptions(
             'typecheck-stub-port',
             ports,
-            getSetting('typecheck-stub-port'),
+            preferences ? preferences.port : getSetting('typecheck-stub-port'),
         )
         const boardPackages = await typechecking.listStubPackages({
             ...familyFilters,
             ...(port ? { port } : {}),
         })
         const boards = family === 'micropython' ? typecheckingStubValues(boardPackages, 'board') : []
-        const preferredBoard = boards.includes(getSetting('typecheck-stub-board'))
+        const preferredBoard = boards.includes(preferences?.board)
+            ? preferences.board
+            : boards.includes(getSetting('typecheck-stub-board'))
             ? getSetting('typecheck-stub-board')
             : (boards.includes('GENERIC') ? 'GENERIC' : boards[0])
         const board = replaceTypecheckingStubOptions('typecheck-stub-board', boards, preferredBoard)
@@ -437,7 +478,12 @@ function queueTypecheckingSetting(enabled) {
 }
 
 function queueTypecheckingDeviceSelection() {
-    return queueTypecheckingReconfiguration()
+    if (!getSetting('typecheck-autodetect')) { return queueTypecheckingReconfiguration() }
+    typecheckingAction = typecheckingAction.
+        then(updateTypecheckingStubSelectors).
+        then(() => applyTypecheckingReconfiguration()).
+        catch(err => report('Unable to autodetect type stubs', err))
+    return typecheckingAction
 }
 
 async function applyTypecheckingReconfiguration({ syncWorkspace = false } = {}) {
@@ -2546,6 +2592,7 @@ export function applyTranslation() {
         QS('label[for=typecheck-enabled]').innerText = T('settings.typecheck-enabled')
         QS('label[for=typecheck-mode]').innerText = T('settings.typecheck-mode')
         QS('label[for=typecheck-scope]').innerText = T('settings.typecheck-scope')
+        QS('label[for=typecheck-autodetect]').innerText = T('settings.typecheck-autodetect')
         QS('label[for=typecheck-stub-family]').innerText = T('settings.typecheck-stub-family')
         QS('label[for=typecheck-stub-version]').innerText = T('settings.typecheck-stub-version')
         QS('label[for=typecheck-stub-port]').innerText = T('settings.typecheck-stub-port')
@@ -2705,6 +2752,10 @@ function showOfflineReadyToast(version) {
     onSettingChange('typecheck-mode', queueTypecheckingReconfiguration)
     onSettingChange('typecheck-scope', () =>
         queueTypecheckingReconfiguration({ syncWorkspace: true }))
+    onSettingChange('typecheck-autodetect', () => {
+        updateTypecheckingStubApplicability()
+        queueTypecheckingDeviceSelection()
+    })
     for (const id of [
         'typecheck-stub-family',
         'typecheck-stub-version',
@@ -2712,7 +2763,7 @@ function showOfflineReadyToast(version) {
         'typecheck-stub-board',
     ]) {
         onSettingChange(id, () => {
-            if (syncingTypecheckingStubSelectors) { return }
+            if (syncingTypecheckingStubSelectors) { pendingTypecheckingStubRefresh = true; return }
             typecheckingAction = typecheckingAction.
                 then(updateTypecheckingStubSelectors).
                 then(() => applyTypecheckingReconfiguration()).

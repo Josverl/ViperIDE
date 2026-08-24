@@ -3,6 +3,77 @@ import re
 from playwright.sync_api import expect
 
 
+def test_typechecking_autodetects_connected_vm(page, viperide_server, tmp_path):
+    console_errors = []
+    page.on("console", lambda message: console_errors.append(message.text) if message.type == "error" else None)
+    page.add_init_script("localStorage.setItem('settings', JSON.stringify({'typecheck-enabled': true}));")
+
+    page.goto(f"{viperide_server}/?vm=1", wait_until="domcontentloaded")
+
+    status = page.locator("#typecheck-tab")
+    settings_tab = page.locator('[data-target="menu-settings"]')
+    autodetect = page.locator("#typecheck-autodetect")
+    family = page.locator("#typecheck-stub-family")
+    version = page.locator("#typecheck-stub-version")
+    port = page.locator("#typecheck-stub-port")
+    board = page.locator("#typecheck-stub-board")
+    package = page.locator("#typecheck-stub-selected-package")
+
+    expect(status).to_have_attribute("data-state", "ready", timeout=90_000)
+    expect(status).to_have_attribute("title", re.compile(r"standard mode with webassembly stubs"), timeout=90_000)
+    settings_tab.click()
+    expect(autodetect).to_be_checked()
+    expect(page.locator("label[for=typecheck-autodetect]")).to_have_text("Autoselect stubs")
+    expect(family).to_have_value("micropython")
+    expect(port).to_have_value("webassembly")
+    expect(package).to_have_value(re.compile(r"^micropython-webassembly-stubs=="))
+    for selector in (family, version, port, board):
+        expect(selector).to_be_disabled()
+    assert page.evaluate("JSON.parse(localStorage.getItem('settings'))['typecheck-autodetect']") is True
+
+    autodetect.uncheck()
+    for selector in (family, version, port, board):
+        expect(selector).to_be_enabled()
+    assert page.evaluate("JSON.parse(localStorage.getItem('settings'))['typecheck-autodetect']") is False
+    assert console_errors == []
+    page.screenshot(path=tmp_path / "typechecking-autodetect-vm.png")
+
+
+def test_catalog_only_stub_port_can_switch_without_deadlock(page, viperide_server, tmp_path):
+    console_errors = []
+    page.on("console", lambda message: console_errors.append(message.text) if message.type == "error" else None)
+    page.add_init_script(
+        """
+        localStorage.setItem('settings', JSON.stringify({
+            'typecheck-enabled': true,
+            'typecheck-autodetect': false,
+            'typecheck-stub-family': 'micropython',
+            'typecheck-stub-version': '1.28.0',
+            'typecheck-stub-port': 'esp32',
+            'typecheck-stub-board': 'GENERIC'
+        }));
+        """
+    )
+
+    page.goto(f"{viperide_server}/?vm=1", wait_until="domcontentloaded")
+    status = page.locator("#typecheck-tab")
+    port = page.locator("#typecheck-stub-port")
+    package = page.locator("#typecheck-stub-selected-package")
+
+    expect(status).to_have_attribute("data-state", "ready", timeout=90_000)
+    page.locator('[data-target="menu-settings"]').click()
+    port.select_option("esp8266")
+    expect(status).to_have_attribute("title", re.compile(r"standard mode with esp8266 stubs"), timeout=90_000)
+    expect(package).to_have_value(re.compile(r"^micropython-esp8266"), timeout=90_000)
+
+    port.select_option("esp32")
+    expect(status).to_have_attribute("title", re.compile(r"standard mode with esp32 stubs"), timeout=90_000)
+    expect(package).to_have_value(re.compile(r"^micropython-esp32-stubs=="), timeout=90_000)
+    expect(port).to_be_enabled()
+    assert console_errors == []
+    page.screenshot(path=tmp_path / "typechecking-catalog-port-switch.png")
+
+
 def test_typechecking_mode_and_stub_selection_persist(page, viperide_server, tmp_path):
     console_errors = []
     page.on("console", lambda message: console_errors.append(message.text) if message.type == "error" else None)
@@ -10,7 +81,10 @@ def test_typechecking_mode_and_stub_selection_persist(page, viperide_server, tmp
     page.add_init_script(
         """
         if (!sessionStorage.getItem('typechecking-settings-test')) {
-            localStorage.setItem('settings', JSON.stringify({'typecheck-enabled': true}));
+            localStorage.setItem('settings', JSON.stringify({
+                'typecheck-enabled': true,
+                'typecheck-autodetect': false
+            }));
             sessionStorage.setItem('typechecking-settings-test', 'initialized');
         }
         """
@@ -21,6 +95,7 @@ def test_typechecking_mode_and_stub_selection_persist(page, viperide_server, tmp
     status = page.locator("#typecheck-tab")
     mode = page.locator("#typecheck-mode")
     scope = page.locator("#typecheck-scope")
+    autodetect = page.locator("#typecheck-autodetect")
     family = page.locator("#typecheck-stub-family")
     version = page.locator("#typecheck-stub-version")
     port = page.locator("#typecheck-stub-port")
@@ -39,6 +114,7 @@ def test_typechecking_mode_and_stub_selection_persist(page, viperide_server, tmp
     settings_tab.click()
     expect(mode).to_have_value("standard")
     expect(scope).to_have_value("openFilesOnly")
+    expect(autodetect).not_to_be_checked()
     expect(scope.locator("option[value=workspace]")).to_have_text("All")
     expect(scope.locator("option[value=openFilesOnly]")).to_have_text("Opened")
     expect(family).to_have_value("micropython")

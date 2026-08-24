@@ -13,7 +13,9 @@ import {
     parseStubPackageSpecifier,
     resolveTypecheckingBoard,
     simpleStubVersion,
+    typecheckingAutodetectFallback,
     typecheckingBoardOptions,
+    typecheckingStubPreferences,
     typecheckingRuntimeConfig,
 } from '../../../src/typechecking/typechecking_settings.js'
 
@@ -126,6 +128,108 @@ describe('type-checking settings', () => {
             },
             extraPaths: ['/workspace/lib'],
             typeshedPath: '/typeshed-micropython',
+        })
+    })
+
+    it('matches connected firmware metadata to an exact catalog target', () => {
+        const packages = [
+            { family: 'micropython', runtimeVersions: ['1.28.0'], port: 'esp32', board: 'GENERIC' },
+            { family: 'micropython', runtimeVersions: ['1.28.0'], port: 'esp32', board: 'ESP32_GENERIC_C3' },
+            { family: 'micropython', runtimeVersions: ['1.28.0'], port: 'rp2', board: 'RPI_PICO_W' },
+        ]
+
+        assert.deepEqual(typecheckingStubPreferences({
+            family: 'micropython',
+            version: '1.28.0-preview.4',
+            port: 'esp32',
+            board_id: 'esp32-generic-c3',
+        }, packages, '1.28.0'), {
+            family: 'micropython',
+            version: '1.28.0',
+            port: 'esp32',
+            board: 'ESP32_GENERIC_C3',
+        })
+    })
+
+    it('falls back to the catalog default version and generic board', () => {
+        const packages = [
+            { family: 'micropython', runtimeVersions: ['1.27.0'], port: 'esp32', board: 'GENERIC' },
+            { family: 'micropython', runtimeVersions: ['1.28.0'], port: 'esp32', board: 'GENERIC' },
+        ]
+
+        assert.deepEqual(typecheckingStubPreferences({
+            version: '1.29.0',
+            platform: 'esp32',
+            build: 'CUSTOM_BOARD',
+        }, packages, '1.28.0'), {
+            family: 'micropython',
+            version: '1.28.0',
+            port: 'esp32',
+            board: 'GENERIC',
+        })
+    })
+
+    it('prefers a catalog release from the connected firmware series', () => {
+        const packages = [
+            { family: 'micropython', runtimeVersions: ['1.28.0'], port: 'rp2', board: 'GENERIC' },
+            { family: 'micropython', runtimeVersions: ['1.27.0'], port: 'rp2', board: 'GENERIC' },
+        ]
+
+        assert.strictEqual(typecheckingStubPreferences({
+            version: '1.28.1',
+            port: 'rp2',
+        }, packages, '1.27.0').version, '1.28.0')
+    })
+
+    it('preserves the detected port when its exact firmware release is unavailable', () => {
+        const packages = [
+            { family: 'micropython', runtimeVersions: ['1.27.0'], port: 'esp32', board: 'GENERIC' },
+            { family: 'micropython', runtimeVersions: ['1.28.0'], port: 'webassembly', board: 'GENERIC' },
+        ]
+
+        assert.deepEqual(typecheckingStubPreferences({
+            firmware_version: '1.27.0',
+            port: 'webassembly',
+        }, packages, '1.28.0'), {
+            family: 'micropython',
+            version: '1.28.0',
+            port: 'webassembly',
+            board: 'GENERIC',
+        })
+    })
+
+    it('uses generic same-port stubs with an informational notice for an unknown board', () => {
+        const packages = [
+            { family: 'micropython', runtimeVersions: ['1.28.0'], port: 'esp32', board: 'GENERIC' },
+            { family: 'micropython', runtimeVersions: ['1.28.0'], port: 'esp32', board: 'ESP32_GENERIC_C3' },
+        ]
+        const devInfo = {
+            firmware_version: '1.28.0',
+            port: 'esp32',
+            board_id: 'ESP32_GENERIC_C2',
+        }
+        const preferences = typecheckingStubPreferences(devInfo, packages, '1.28.0')
+
+        assert.deepEqual(preferences, {
+            family: 'micropython', version: '1.28.0', port: 'esp32', board: 'GENERIC',
+        })
+        assert.deepEqual(typecheckingAutodetectFallback(devInfo, preferences), {
+            level: 'info',
+            message: 'No board-specific stubs match "ESP32_GENERIC_C2". Using generic esp32 stubs.',
+        })
+    })
+
+    it('warns that an uncatalogued port needs manual selection', () => {
+        const packages = [
+            { family: 'micropython', runtimeVersions: ['1.28.0'], port: 'esp32', board: 'GENERIC' },
+        ]
+        const devInfo = { firmware_version: '1.28.0', port: 'dabao' }
+        const preferences = typecheckingStubPreferences(devInfo, packages, '1.28.0')
+
+        assert.strictEqual(preferences.port, '')
+        assert.deepEqual(typecheckingAutodetectFallback(devInfo, preferences), {
+            level: 'warning',
+            message: 'Failed to autoselect type stubs for port "dabao". Disable Autodetect to select stubs manually.',
         })
     })
 })

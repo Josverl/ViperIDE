@@ -137,6 +137,25 @@ describe('TypecheckingAssets', () => {
         assert.match(runtime.boardStubsUrl, /stubs-test-board\.zip$/)
     })
 
+    it('uses the default fallback archive for a catalog-only board ID', async () => {
+        const assets = new TypecheckingAssets({
+            fetch: async () => response({ json: manifest }),
+        })
+
+        const runtime = await assets.prepare({
+            boardId: 'esp8266',
+            boardStubPackage: {
+                packageName: 'micropython-esp8266-stubs',
+                version: '1.28.0.post1',
+                fallbackToBundled: true,
+            },
+        })
+
+        assert.strictEqual(runtime.stubBundle.id, 'esp8266')
+        assert.match(runtime.boardStubsUrl, /stubs-test-board\.zip$/)
+        assert.strictEqual(runtime.boardStubPackage.packageName, 'micropython-esp8266-stubs')
+    })
+
     it('reports unknown boards and failed asset responses', async () => {
         const assets = new TypecheckingAssets({
             fetch: async () => response({ json: manifest }),

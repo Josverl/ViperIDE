@@ -40,7 +40,8 @@ export class TypecheckingAssets {
     const manifest = await this.loadManifest()
     const boardId = typeof config === 'string' ? config : config.boardId
     const selectedId = boardId || manifest.default
-    const board = manifest.boards.find(item => item.id === selectedId)
+    const board = manifest.boards.find(item => item.id === selectedId) ||
+      (config.boardStubPackage && manifest.boards.find(item => item.id === manifest.default))
     if (!board) {
       throw new Error(`Unknown type-checking stub bundle: ${selectedId}`)
     }
@@ -57,7 +58,7 @@ export class TypecheckingAssets {
               },
           }
         : {}),
-      stubBundle: Object.freeze({ ...board }),
+      stubBundle: Object.freeze({ ...board, id: selectedId }),
     }
   }
 

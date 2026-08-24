@@ -66,6 +66,65 @@ function normalizePackageName(value) {
     return String(value || '').trim().toLowerCase().replace(/[-_.]+/g, '-')
 }
 
+function matchingCatalogValue(values, preferred) {
+    const normalized = String(preferred || '').trim().toLowerCase().replace(/[-_. ]+/g, '-')
+    return values.find(value => String(value).toLowerCase().replace(/[-_. ]+/g, '-') === normalized)
+}
+
+/**
+ * Resolve connected-device metadata to values supported by the stub catalog.
+ *
+ * @param {object} devInfo Connected-device metadata.
+ * @param {object[]} packages Published stub catalog entries.
+ * @param {string} [defaultVersion] Catalog default runtime version.
+ * @returns {{family: string, version: string, port: string, board: string}}
+ */
+export function typecheckingStubPreferences(devInfo, packages, defaultVersion = '') {
+    const family = String(devInfo?.family || '').toLowerCase() === 'circuitpython'
+        ? 'circuitpython'
+        : 'micropython'
+    let candidates = packages.filter(entry => entry.family === family)
+    const ports = [...new Set(candidates.map(entry => entry.port).filter(Boolean))]
+    const port = matchingCatalogValue(ports, devInfo?.port || devInfo?.platform) || ''
+    if (port) { candidates = candidates.filter(entry => entry.port === port) }
+    const versions = [...new Set(candidates.flatMap(entry => entry.runtimeVersions || []))]
+    const requestedVersion = String(devInfo?.firmware_version || devInfo?.version || devInfo?.release || '').match(/\d+\.\d+(?:\.\d+)?/)?.[0] || ''
+    const requestedSeries = requestedVersion.split('.').slice(0, 2).join('.')
+    const version = matchingCatalogValue(versions, requestedVersion) ||
+        versions.find(value => requestedSeries && value.split('.').slice(0, 2).join('.') === requestedSeries) ||
+        matchingCatalogValue(versions, defaultVersion) || versions[0] || ''
+    if (version) {
+        candidates = candidates.filter(entry => entry.runtimeVersions?.includes(version))
+    }
+    const boards = [...new Set(candidates.map(entry => entry.board).filter(Boolean))]
+    const board = matchingCatalogValue(boards, devInfo?.board_id || devInfo?.board || devInfo?.build) ||
+        matchingCatalogValue(boards, 'GENERIC') || boards[0] || ''
+    return { family, version, port, board }
+}
+
+/** @returns {{level: 'info'|'warning', message: string}|null} */
+export function typecheckingAutodetectFallback(devInfo, preferences) {
+    if (preferences.family !== 'micropython') { return null }
+    const requestedPort = String(devInfo?.port || devInfo?.platform || '').trim()
+    if (requestedPort && !preferences.port) {
+        return {
+            level: 'warning',
+            message: `Failed to autoselect type stubs for port "${requestedPort}". Disable Autodetect to select stubs manually.`,
+        }
+    }
+    const requestedBoard = String(devInfo?.board_id || devInfo?.board || devInfo?.build || '').trim()
+    const normalizedBoard = requestedBoard.toLowerCase().replace(/[-_. ]+/g, '-')
+    const normalizedPort = preferences.port.toLowerCase().replace(/[-_. ]+/g, '-')
+    if (requestedBoard && preferences.board === 'GENERIC' &&
+        !['generic', `${normalizedPort}-generic`].includes(normalizedBoard)) {
+        return {
+            level: 'info',
+            message: `No board-specific stubs match "${requestedBoard}". Using generic ${preferences.port} stubs.`,
+        }
+    }
+    return null
+}
+
 /**
  * Parse a PyPI distribution plus an optional version constraint.
  *

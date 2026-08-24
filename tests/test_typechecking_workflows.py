@@ -13,6 +13,7 @@ def _configure_typechecking(page, **overrides):
         "typecheck-enabled": True,
         "typecheck-mode": "standard",
         "typecheck-scope": "workspace",
+        "typecheck-autodetect": False,
         "typecheck-stub-family": "micropython",
         "typecheck-stub-version": "1.28.0",
         "typecheck-stub-port": "esp32",

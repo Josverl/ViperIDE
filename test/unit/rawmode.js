@@ -12,9 +12,14 @@ describe('MpRawMode device information', () => {
         const raw = new MpRawMode(null)
         raw.exec = async () =>
             'Raspberry Pi Pico2 with RP2350|abc123|1.28.0|rp2|MicroPython 1.28.0|rp2|' +
-            'RPI_PICO2|5|6|3|:/lib\n'
+            'RPI_PICO2|5|6|3|:/lib|micropython|1.28.0|rp2|RPI_PICO2||RP2350\n'
 
         assert.deepInclude(await raw.getDeviceInfo(), {
+            family: 'micropython',
+            firmware_version: '1.28.0',
+            port: 'rp2',
+            board_id: 'RPI_PICO2',
+            cpu: 'RP2350',
             platform: 'rp2',
             build: 'RPI_PICO2',
             mpy_arch: 'armv7m',
@@ -32,5 +37,9 @@ describe('MpRawMode device information', () => {
 
         assert.strictEqual(info.platform, 'webassembly')
         assert.strictEqual(info.build, '')
+        assert.strictEqual(info.family, 'micropython')
+        assert.strictEqual(info.firmware_version, '1.28.0')
+        assert.strictEqual(info.port, 'webassembly')
+        assert.strictEqual(info.board_id, '')
     })
 })
