@@ -13,6 +13,7 @@ const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'))
 // build.py passes this via the environment. When running Rollup directly,
 // default to the local development server.
 const BASE_URL = process.env.VIPER_IDE_BASE_URL || 'http://localhost:10001'
+const DEPLOYMENT_TAG = process.env.VIPER_IDE_DEPLOYMENT_TAG || ''
 // Package versions belong only in package.json/package-lock.json. This path deliberately
 // addresses the installed package without duplicating its version in build configuration.
 const PYRIGHT_WORKER_PACKAGE = 'node_modules/@mp-codemirror/pyright-worker'
@@ -33,6 +34,7 @@ const copyPyrightWorkerPackage = () => {
 const copyHtml = (src, dst) => {
   let data = fs.readFileSync(src, 'utf8').
       replaceAll('${VIPER_IDE_BASE_URL}', BASE_URL).
+      replaceAll('${VIPER_IDE_DEPLOYMENT_TAG}', DEPLOYMENT_TAG).
       replaceAll('${VIPER_IDE_DESCR}', pkg.description)
   fs.writeFileSync(dst, data)
 }

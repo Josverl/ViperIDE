@@ -10,6 +10,7 @@ on:
 env:
   BETA_REPOSITORY: Josverl/viperide
   BETA_BRANCH: feat/type_checking
+  VIPER_IDE_DEPLOYMENT_TAG: TYPING_BETA
 
 permissions:
   contents: read

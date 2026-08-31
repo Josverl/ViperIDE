@@ -28,6 +28,22 @@ body.loaded {
     font-weight: normal;
 }
 
+.deployment-tag {
+    margin-left: 0.25em;
+    padding: 0.1em 0.4em;
+    border: 1px solid #e5a000;
+    border-radius: 0.35em;
+    color: #e5a000;
+    font-size: 0.6em;
+    font-weight: bold;
+    letter-spacing: 0.08em;
+    vertical-align: middle;
+}
+
+.deployment-tag:empty {
+    display: none;
+}
+
 #tool-panel {
     display: flex;
     align-items: center;
