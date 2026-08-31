@@ -18,6 +18,8 @@ const DEPLOYMENT_TAG = process.env.VIPER_IDE_DEPLOYMENT_TAG || ''
 // addresses the installed package without duplicating its version in build configuration.
 const PYRIGHT_WORKER_PACKAGE = 'node_modules/@mp-codemirror/pyright-worker'
 const PYRIGHT_WORKER_BUILD = 'build/assets/pyright-worker'
+const MPY_PACKAGE = 'node_modules/@micropython/micropython-webassembly-pyscript'
+const MPY_WASM_BUILD = 'build/assets/micropython.wasm'
 
 const copyPyrightWorkerPackage = () => {
   fs.rmSync(PYRIGHT_WORKER_BUILD, { recursive: true, force: true })
@@ -29,6 +31,10 @@ const copyPyrightWorkerPackage = () => {
       { recursive: true },
     )
   }
+}
+
+const copyMicroPythonWasm = () => {
+  fs.copyFileSync(`${MPY_PACKAGE}/micropython.wasm`, MPY_WASM_BUILD)
 }
 
 const copyHtml = (src, dst) => {
@@ -121,6 +127,7 @@ const common = (args, name) => ({
 
 export default args => {
   copyPyrightWorkerPackage()
+  copyMicroPythonWasm()
   return [{
     input: './src/app.js',
     ...common(args, 'app')
