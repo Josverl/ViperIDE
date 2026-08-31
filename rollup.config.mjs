@@ -7,6 +7,7 @@ import css from 'rollup-plugin-import-css'
 import serve from 'rollup-plugin-serve'
 import sourcemaps from 'rollup-plugin-sourcemaps2';
 import fs from 'fs'
+import path from 'path'
 
 const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'))
 
@@ -14,9 +15,11 @@ const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'))
 // default to the local development server.
 const BASE_URL = process.env.VIPER_IDE_BASE_URL || 'http://localhost:10001'
 const DEPLOYMENT_TAG = process.env.VIPER_IDE_DEPLOYMENT_TAG || ''
-// Package versions belong only in package.json/package-lock.json. This path deliberately
-// addresses the installed package without duplicating its version in build configuration.
-const PYRIGHT_WORKER_PACKAGE = 'node_modules/@mp-codemirror/pyright-worker'
+// Normal builds use the installed packages. build:local supplies absolute source paths
+// without changing package.json, package-lock.json, or node_modules.
+const LSP_CLIENT_PACKAGE = process.env.VIPER_IDE_LOCAL_LSP_CLIENT_PACKAGE || ''
+const PYRIGHT_WORKER_PACKAGE = process.env.VIPER_IDE_LOCAL_PYRIGHT_WORKER_PACKAGE ||
+  'node_modules/@mp-codemirror/pyright-worker'
 const PYRIGHT_WORKER_BUILD = 'build/assets/pyright-worker'
 const MPY_PACKAGE = 'node_modules/@micropython/micropython-webassembly-pyscript'
 const MPY_WASM_BUILD = 'build/assets/micropython.wasm'
@@ -35,6 +38,23 @@ const copyPyrightWorkerPackage = () => {
 
 const copyMicroPythonWasm = () => {
   fs.copyFileSync(`${MPY_PACKAGE}/micropython.wasm`, MPY_WASM_BUILD)
+}
+
+const localLspClient = () => {
+  if (!LSP_CLIENT_PACKAGE) { return null }
+  const packageJson = JSON.parse(fs.readFileSync(path.join(LSP_CLIENT_PACKAGE, 'package.json'), 'utf8'))
+  const entry = packageJson.exports?.['.']?.import || packageJson.browserDistribution?.entry || packageJson.main
+  if (packageJson.name !== '@mp-codemirror/lsp-client' || !entry) {
+    throw new Error(`${LSP_CLIENT_PACKAGE} is not an @mp-codemirror/lsp-client package`)
+  }
+  return {
+    name: 'local-lsp-client',
+    resolveId(source) {
+      return source === '@mp-codemirror/lsp-client'
+        ? path.resolve(LSP_CLIENT_PACKAGE, entry)
+        : null
+    },
+  }
 }
 
 const copyHtml = (src, dst) => {
@@ -98,11 +118,19 @@ const common = (args, name) => ({
   },
   plugins: [
     stripMicroPythonNodeCli(),
+    localLspClient(),
     css({
       output: `${name}.css`,
       minify: !args.configDebug,
     }),
-    resolve(),
+    resolve({
+      dedupe: [
+        '@codemirror/autocomplete',
+        '@codemirror/lint',
+        '@codemirror/state',
+        '@codemirror/view',
+      ],
+    }),
     commonjs(),
     json({
       compact: true

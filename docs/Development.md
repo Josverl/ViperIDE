@@ -78,6 +78,42 @@ Start the watcher:
 npm start
 ```
 
+### Build with local CodeMirror packages
+
+To test changes from a local `stubs_playground` checkout without changing
+ViperIDE's registry dependencies or lockfile, pass its path to `build:local`:
+
+```sh
+npm run build:local -- ../stubs_playground
+```
+
+Build and start the local development server in one command:
+
+```sh
+npm run start:local -- ../stubs_playground
+```
+
+Open <http://localhost:10001/?vm=1>. Rollup watches ViperIDE source files; stop
+the server with Ctrl+C. Restart the command after changing package sources so
+the local Pyright worker is rebuilt.
+
+Build with the local packages and run the full Playwright browser suite:
+
+```sh
+npm run test:local -- ../stubs_playground
+```
+
+The path may be absolute or relative to the directory where npm is invoked. It
+may identify the workspace root, its `packages` directory, either package
+directory, or either package's `package.json`. The command builds the local
+Pyright worker in development mode, bundles the local LSP client source, and
+copies the local worker assets into ViperIDE's `build/` directory.
+`test:local` uses `uv` to provide Pytest and the Playwright plugin, then runs
+the browser tests against that generated build.
+
+Normal `npm run build` builds against the registry versions installed in
+`node_modules`.
+
 
 ## Linting
 

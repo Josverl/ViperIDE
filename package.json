@@ -6,9 +6,12 @@
   "type": "module",
   "scripts": {
     "build": "rollup --config",
+    "build:local": "node scripts/build-local.mjs build",
     "start": "rollup --config --configDebug --watch",
+    "start:local": "node scripts/build-local.mjs start",
     "lint": "npx eslint",
     "test": "npx mocha && npm run test:unit",
+    "test:local": "node scripts/build-local.mjs test",
     "test:unit": "npx mocha --no-config \"test/unit/**/*.js\""
   },
   "dependencies": {
