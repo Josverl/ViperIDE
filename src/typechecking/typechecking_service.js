@@ -37,6 +37,10 @@ const MICROPYTHON_STUB_TARGETS = new Set(['esp32', 'rp2', 'stm32', 'samd', 'weba
  * @property {object|null} selectedStubBundle - Selected manifest board entry.
  * @property {string} typeCheckingMode - Effective Pyright checking mode.
  * @property {string} diagnosticMode - Effective Pyright diagnostic scope.
+ * @property {'remote'|'last-known-good'|'bundled'|null} runtimeSource - How the worker was loaded.
+ * @property {string|null} runtimeId - Immutable runtime ID or `'bundled'`.
+ * @property {object|null} runtimeManifest - Selected validated runtime manifest.
+ * @property {object[]} runtimeFallbacks - Rejected runtime candidates before the selection.
  * @property {Map<string, number>} documentVersions - Copy of open LSP document versions.
  * @property {Map<string, object[]>} diagnosticStatus - Copy of diagnostics grouped by URI.
  * @property {Map<string, string>} workspaceFiles - Copy of mirrored workspace files.
@@ -102,6 +106,10 @@ export class TypecheckingService {
     this.transport = null
     this.workspaceDiagnosticsSubscription = null
     this.selectedStubBundle = null
+    this.runtimeSource = null
+    this.runtimeId = null
+    this.runtimeManifest = null
+    this.runtimeFallbacks = []
     this.documentVersions = new Map()
     this.diagnosticStatus = new Map()
     this.editorBindings = new Map()
@@ -165,6 +173,10 @@ export class TypecheckingService {
       this.client = result.client
       this.transport = result.transport
       this.workspaceDiagnosticsSubscription = result.workspaceDiagnosticsSubscription || null
+      this.runtimeSource = result.runtimeSource || 'bundled'
+      this.runtimeId = result.runtimeId || 'bundled'
+      this.runtimeManifest = result.runtimeManifest || null
+      this.runtimeFallbacks = result.runtimeFallbacks || []
       this.rebindEditors()
       this.setStatus('ready', null)
       return this.snapshot()
@@ -789,6 +801,10 @@ export class TypecheckingService {
       selectedStubBundle: this.selectedStubBundle,
       typeCheckingMode: this.clientConfig?.typeCheckingMode || 'standard',
       diagnosticMode: this.clientConfig?.diagnosticMode || 'openFilesOnly',
+      runtimeSource: this.runtimeSource,
+      runtimeId: this.runtimeId,
+      runtimeManifest: this.runtimeManifest,
+      runtimeFallbacks: this.runtimeFallbacks,
       documentVersions: new Map(this.documentVersions),
       diagnosticStatus: new Map(this.diagnosticStatus),
       workspaceFiles: new Map(this.workspaceFiles),
@@ -810,6 +826,10 @@ export class TypecheckingService {
     this.closeResult({ client: this.client, transport: this.transport })
     this.client = null
     this.transport = null
+    this.runtimeSource = null
+    this.runtimeId = null
+    this.runtimeManifest = null
+    this.runtimeFallbacks = []
     this.documentVersions.clear()
     this.diagnosticStatus.clear()
     this.editorBindings.clear()

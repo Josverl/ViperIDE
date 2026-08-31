@@ -17,6 +17,10 @@ function snapshot(status, options = {}) {
         selectedStubBundle: options.stubBundle || null,
         typeCheckingMode: options.typeCheckingMode || 'standard',
         diagnosticStatus: options.diagnosticStatus || new Map(),
+        runtimeSource: options.runtimeSource || null,
+        runtimeId: options.runtimeId || null,
+        runtimeManifest: options.runtimeManifest || null,
+        runtimeFallbacks: options.runtimeFallbacks || [],
     }
 }
 
@@ -92,5 +96,46 @@ describe('type-checking status UI', () => {
         assert.strictEqual(statusElement.attributes['aria-busy'], 'true')
         assert.match(statusElement.attributes['aria-label'], /^Problems: .*connected device/)
         assert.isTrue(checkbox.disabled)
+    })
+
+    it('surfaces runtime source and fallback detail in ready state', () => {
+        const remoteReady = typecheckingStatusPresentation(
+            snapshot('ready', { runtimeSource: 'remote', runtimeFallbacks: [] }),
+            true,
+        )
+        assert.strictEqual(remoteReady.runtimeSource, 'remote')
+        assert.include(remoteReady.title, 'Runtime: remote.')
+
+        const lkgReady = typecheckingStatusPresentation(
+            snapshot('ready', {
+                runtimeSource: 'last-known-good',
+                runtimeFallbacks: [{ reason: 'incompatible' }],
+            }),
+            true,
+        )
+        assert.strictEqual(lkgReady.runtimeSource, 'last-known-good')
+        assert.include(lkgReady.title, 'Runtime: cached last-known-good.')
+        assert.include(lkgReady.title, '1 incompatible runtime skipped')
+    })
+
+    it('omits runtime detail for bundled-only startup', () => {
+        const bundled = typecheckingStatusPresentation(
+            snapshot('ready', { runtimeSource: 'bundled' }),
+            true,
+        )
+        assert.notInclude(bundled.title, 'Runtime:')
+    })
+
+    it('includes runtime fallback detail in error state', () => {
+        const errored = typecheckingStatusPresentation(
+            snapshot('error', {
+                error: new Error('incompatible'),
+                runtimeSource: 'last-known-good',
+                runtimeFallbacks: [{ reason: 'a' }, { reason: 'b' }],
+            }),
+            true,
+        )
+        assert.include(errored.title, '2 incompatible runtimes skipped')
+        assert.strictEqual(errored.runtimeSource, 'last-known-good')
     })
 })

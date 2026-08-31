@@ -48,6 +48,25 @@ function diagnosticCounts(diagnosticStatus) {
     return counts
 }
 
+/**
+ * Build an actionable runtime source/fallback detail string for status tooltips.
+ *
+ * @param {object} snapshot TypecheckingSnapshot.
+ * @returns {string} Detail suffix (includes leading space) or empty string.
+ */
+function runtimeStatusDetail(snapshot) {
+    const source = snapshot.runtimeSource
+    if (!source || source === 'bundled') { return '' }
+    const fallbacks = snapshot.runtimeFallbacks || []
+    const rejected = fallbacks.length
+        ? ` (${fallbacks.length} incompatible runtime${fallbacks.length === 1 ? '' : 's'} skipped)`
+        : ''
+    if (source === 'last-known-good') {
+        return ` Runtime: cached last-known-good.${rejected}`
+    }
+    return ` Runtime: ${source}.${rejected}`
+}
+
 export function typecheckingStatusPresentation(snapshot, enabled) {
     const state = enabled ? snapshot.status : 'disabled'
     const board = snapshot.selectedStubBundle?.id || snapshot.selectedStubBundle || 'standard'
@@ -75,11 +94,13 @@ export function typecheckingStatusPresentation(snapshot, enabled) {
         const detail = (counts.errors || counts.warnings)
             ? ' See the Problems tab for details.'
             : ''
+        const runtimeDetail = runtimeStatusDetail(snapshot)
         return {
             state,
             label: `Type check: ${counts.errors ? `${counts.errors} error${counts.errors === 1 ? '' : 's'}` : 'Ready'}`,
-            title: `Pyright is ready in ${mode} mode with ${board} stubs (${summary}).${detail}`,
+            title: `Pyright is ready in ${mode} mode with ${board} stubs (${summary}).${detail}${runtimeDetail}`,
             busy: false,
+            runtimeSource: snapshot.runtimeSource || null,
         }
     }
     case 'error':
@@ -87,8 +108,10 @@ export function typecheckingStatusPresentation(snapshot, enabled) {
             state,
             label: 'Type check: Error',
             title: `Pyright failed: ${snapshot.error?.message || snapshot.error || 'Unknown error'}. ` +
-                'Disable and enable type checking in Settings to retry.',
+                'Disable and enable type checking in Settings to retry.' +
+                runtimeStatusDetail(snapshot),
             busy: false,
+            runtimeSource: snapshot.runtimeSource || null,
         }
     case 'disposed':
         return {

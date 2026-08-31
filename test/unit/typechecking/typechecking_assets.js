@@ -167,4 +167,66 @@ describe('TypecheckingAssets', () => {
         })
         await rejects(failed.prepare(), /stub manifest: HTTP 503/)
     })
+
+    it('omits runtime manifest options when explicitly disabled', async () => {
+        const assets = new TypecheckingAssets({
+            fetch: async () => response({ json: manifest }),
+            runtimeManifestUrl: null,
+        })
+
+        const runtime = await assets.prepare()
+
+        assert.isUndefined(runtime.runtimeManifestUrl)
+        assert.isUndefined(runtime.runtimeAllowedOrigins)
+        assert.isUndefined(runtime.runtimeCacheName)
+        assert.isUndefined(runtime.runtimeStorageKey)
+    })
+
+    it('includes runtime manifest options when a URL is configured', async () => {
+        const assets = new TypecheckingAssets({
+            fetch: async () => response({ json: manifest }),
+            runtimeManifestUrl: 'https://cdn.example.test/runtime-manifest.json',
+            runtimeAllowedOrigins: ['https://cdn.example.test'],
+        })
+
+        const runtime = await assets.prepare()
+
+        assert.strictEqual(runtime.runtimeManifestUrl, 'https://cdn.example.test/runtime-manifest.json')
+        assert.deepEqual(runtime.runtimeAllowedOrigins, ['https://cdn.example.test'])
+        assert.strictEqual(runtime.runtimeCacheName, 'viperide-pyright-runtime')
+        assert.strictEqual(runtime.runtimeStorageKey, 'viperide-pyright-runtime-lkg')
+        // workerUrl is always present as bundled fallback
+        assert.match(runtime.workerUrl, /pyright_worker\.js$/)
+    })
+
+    it('allows overriding cache name and storage key', async () => {
+        const assets = new TypecheckingAssets({
+            fetch: async () => response({ json: manifest }),
+            runtimeManifestUrl: 'https://cdn.example.test/runtime-manifest.json',
+            runtimeCacheName: 'custom-cache',
+            runtimeStorageKey: 'custom-lkg',
+        })
+
+        const runtime = await assets.prepare()
+
+        assert.strictEqual(runtime.runtimeCacheName, 'custom-cache')
+        assert.strictEqual(runtime.runtimeStorageKey, 'custom-lkg')
+    })
+
+    it('enables manifest loading by default for the deployed production assets', async () => {
+        const assets = new TypecheckingAssets({
+            fetch: async () => response({ json: manifest }),
+        })
+
+        const runtime = await assets.prepare()
+
+        assert.isString(runtime.runtimeManifestUrl)
+        assert.match(runtime.runtimeManifestUrl, /assets\/runtime-manifest\.json$/)
+        assert.isArray(runtime.runtimeAllowedOrigins)
+        assert.lengthOf(runtime.runtimeAllowedOrigins, 1)
+        assert.strictEqual(runtime.runtimeCacheName, 'viperide-pyright-runtime')
+        assert.strictEqual(runtime.runtimeStorageKey, 'viperide-pyright-runtime-lkg')
+        // workerUrl is always present as bundled fallback
+        assert.match(runtime.workerUrl, /pyright_worker\.js$/)
+    })
 })

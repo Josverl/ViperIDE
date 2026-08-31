@@ -89,6 +89,60 @@ describe('TypecheckingService', () => {
         assert.strictEqual(first.selectedStubBundle, 'esp32')
     })
 
+    it('captures runtime metadata from createLSPClient result', async () => {
+        const result = {
+            ...resources(),
+            runtimeSource: 'remote',
+            runtimeId: 'pyright-worker@0.4.3+sha256.abc123',
+            runtimeManifest: { runtimeId: 'pyright-worker@0.4.3+sha256.abc123' },
+            runtimeFallbacks: [{ reason: 'incompatible version' }],
+        }
+        const service = new TypecheckingService({
+            createLSPClient: async () => result,
+        })
+
+        const snap = await service.initialize({ workerUrl: '/worker.js' })
+
+        assert.strictEqual(snap.runtimeSource, 'remote')
+        assert.strictEqual(snap.runtimeId, 'pyright-worker@0.4.3+sha256.abc123')
+        assert.deepEqual(snap.runtimeManifest, { runtimeId: 'pyright-worker@0.4.3+sha256.abc123' })
+        assert.lengthOf(snap.runtimeFallbacks, 1)
+    })
+
+    it('defaults to bundled runtime metadata when not provided by client', async () => {
+        const service = new TypecheckingService({
+            createLSPClient: async () => resources(),
+        })
+
+        const snap = await service.initialize({ workerUrl: '/worker.js' })
+
+        assert.strictEqual(snap.runtimeSource, 'bundled')
+        assert.strictEqual(snap.runtimeId, 'bundled')
+        assert.isNull(snap.runtimeManifest)
+        assert.deepEqual(snap.runtimeFallbacks, [])
+    })
+
+    it('clears runtime metadata on dispose', async () => {
+        const result = {
+            ...resources(),
+            runtimeSource: 'remote',
+            runtimeId: 'test-id',
+            runtimeManifest: { runtimeId: 'test-id' },
+            runtimeFallbacks: [{ reason: 'x' }],
+        }
+        const service = new TypecheckingService({
+            createLSPClient: async () => result,
+        })
+        await service.initialize({ workerUrl: '/worker.js' })
+        service.dispose()
+
+        const snap = service.snapshot()
+        assert.isNull(snap.runtimeSource)
+        assert.isNull(snap.runtimeId)
+        assert.isNull(snap.runtimeManifest)
+        assert.deepEqual(snap.runtimeFallbacks, [])
+    })
+
     it('prepares the runtime and collects diagnostics from unopened workspace files', async () => {
         const result = resources()
         const subscription = {
