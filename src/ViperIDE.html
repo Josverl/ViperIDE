@@ -297,7 +297,7 @@
                     <div>
                         <a class="tab active" data-target="xterm"><i class="fa-solid fa-terminal"></i> <span
                                 id="tab-term">Terminal</span></a>
-                        <a class="tab" id="typecheck-tab" data-target="diagnostics"><i
+                        <a class="tab" id="typecheck-tab" data-target="diagnostics" aria-label="Problems"><i
                                 class="fa-solid fa-square-check"></i> <span id="tab-problems">Problems</span> <span
                                 id="diagnostics-badge"></span></a>
                     </div>
@@ -315,7 +315,7 @@
                 <div id="xterm" class="tab-content active">
                     <!-- Xterm.js terminal content goes here -->
                 </div>
-                <div id="diagnostics" class="tab-content" role="tabpanel" aria-label="Type check diagnostics">
+                <div id="diagnostics" class="tab-content" role="tabpanel" aria-label="Problems">
                     <div id="diagnostics-controls">
                         <label for="diagnostics-file">File</label>
                         <select id="diagnostics-file">

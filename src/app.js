@@ -209,6 +209,7 @@ function updateTypecheckingUI(snapshot = typechecking.snapshot()) {
         QID('typecheck-enabled'),
         snapshot,
         getSetting('typecheck-enabled'),
+        T('tool.problems'),
     )
     QID('typecheck-stub-package').disabled = !packageControlsEnabled
     QID('typecheck-stub-install').disabled = !packageControlsEnabled
@@ -2560,7 +2561,12 @@ export function applyTranslation() {
         QID('btn-conn-usb').setAttribute('title', T('tool.conn.usb'))
         QID('term-clear').setAttribute('title',   T('tool.clear'))
         QID('tab-term').innerText = T('tool.terminal')
-        QID('tab-problems').innerText = T('tool.problems')
+        const problemsLabel = T('tool.problems')
+        QID('tab-problems').innerText = problemsLabel
+        const typecheckTab = QID('typecheck-tab')
+        const statusTitle = typecheckTab.getAttribute('title')
+        typecheckTab.setAttribute('aria-label', statusTitle ? `${problemsLabel}: ${statusTitle}` : problemsLabel)
+        QID('diagnostics').setAttribute('aria-label', problemsLabel)
 
         QSA('#app-expand, #term-expand').forEach(el => {
             el.setAttribute('title', T('tool.fullscreen'))

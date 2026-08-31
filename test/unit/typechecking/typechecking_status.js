@@ -42,18 +42,20 @@ describe('type-checking status UI', () => {
             ['other.py', diagnostics],
         ])
 
-        assert.deepInclude(typecheckingStatusPresentation(
+        const readyPresentation = typecheckingStatusPresentation(
             snapshot('ready', {
                 stubBundle: { id: 'esp32' },
                 typeCheckingMode: 'strict',
                 diagnosticStatus: duplicateDiagnostics,
             }),
             true,
-        ), {
+        )
+        assert.deepInclude(readyPresentation, {
             state: 'ready',
             label: 'Type check: 1 error',
             busy: false,
         })
+        assert.include(readyPresentation.title, 'See the Problems tab for details.')
         assert.include(typecheckingStatusPresentation(
             snapshot('ready', { stubBundle: { id: 'esp32' }, typeCheckingMode: 'strict' }),
             true,
@@ -88,7 +90,7 @@ describe('type-checking status UI', () => {
         assert.strictEqual(rendered.state, 'switching')
         assert.strictEqual(statusElement.dataset.state, 'switching')
         assert.strictEqual(statusElement.attributes['aria-busy'], 'true')
-        assert.include(statusElement.attributes['aria-label'], 'connected device')
+        assert.match(statusElement.attributes['aria-label'], /^Problems: .*connected device/)
         assert.isTrue(checkbox.disabled)
     })
 })

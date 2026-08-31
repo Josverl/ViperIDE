@@ -73,7 +73,7 @@ export function typecheckingStatusPresentation(snapshot, enabled) {
         const summary = `${counts.errors} error${counts.errors === 1 ? '' : 's'}, ` +
             `${counts.warnings} warning${counts.warnings === 1 ? '' : 's'}`
         const detail = (counts.errors || counts.warnings)
-            ? ' See the Type check tab for details.'
+            ? ' See the Problems tab for details.'
             : ''
         return {
             state,
@@ -107,11 +107,11 @@ export function typecheckingStatusPresentation(snapshot, enabled) {
     }
 }
 
-export function renderTypecheckingStatus(statusElement, checkbox, snapshot, enabled) {
+export function renderTypecheckingStatus(statusElement, checkbox, snapshot, enabled, problemsLabel = 'Problems') {
     const presentation = typecheckingStatusPresentation(snapshot, enabled)
     statusElement.dataset.state = presentation.state
     statusElement.title = presentation.title
-    statusElement.setAttribute('aria-label', presentation.title)
+    statusElement.setAttribute('aria-label', `${problemsLabel}: ${presentation.title}`)
     statusElement.setAttribute('aria-busy', String(presentation.busy))
     checkbox.disabled = presentation.busy
     return presentation

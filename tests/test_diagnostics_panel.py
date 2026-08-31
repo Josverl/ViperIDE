@@ -37,6 +37,8 @@ def test_diagnostics_panel_filters_jumps_and_run_returns_to_terminal(page, viper
     expect(page.locator("#typechecking-status")).to_have_count(0)
     expect(typecheck_tab.locator("svg[data-icon=square-check]")).to_have_count(1)
     expect(page.locator("#tab-problems")).to_have_text("Problems")
+    expect(typecheck_tab).to_have_attribute("aria-label", re.compile(r"^Problems: Pyright is "))
+    expect(diagnostics).to_have_attribute("aria-label", "Problems")
 
     editor.fill("import missing_module\n\nprint(undefined_name)\n")
     typecheck_tab.click()
