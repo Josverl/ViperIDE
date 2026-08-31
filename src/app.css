@@ -509,6 +509,14 @@ body.loaded {
     font-size: 0.9rem;
 }
 
+/* CodeMirror repeatedly measures tooltips with a ResizeObserver. Without a
+   fixed upper bound, Edge's shrink-to-fit width changes when CodeMirror moves
+   a long hover left, which triggers another resize and creates a feedback loop. */
+.cm-tooltip.cm-tooltip-hover {
+    max-width: min(700px, calc(100vw - 16px));
+    overflow-wrap: anywhere;
+}
+
 /* Fix touch interaction on iOS */
 .cm-editor, .cm-scroller, .cm-content, .tab-content, #side-menu {
     touch-action: pan-x pan-y !important;
