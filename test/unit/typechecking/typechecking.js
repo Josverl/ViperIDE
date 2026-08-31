@@ -866,6 +866,24 @@ describe('TypecheckingService', () => {
         assert.strictEqual(service.snapshot().documentVersions.size, 0)
     })
 
+    it('waits for asynchronous LSP shutdown before closing the transport', async () => {
+        const shutdown = deferred()
+        const result = resources()
+        result.client.disconnect = () => shutdown.promise
+        const service = new TypecheckingService({
+            createLSPClient: async () => result,
+        })
+        await service.initialize({ workerUrl: 'blob:worker' })
+
+        service.dispose()
+        assert.strictEqual(result.transport.closeCalls, 0)
+
+        shutdown.resolve()
+        await shutdown.promise
+        await Promise.resolve()
+        assert.strictEqual(result.transport.closeCalls, 1)
+    })
+
     it('closes resources that finish initializing after disposal', async () => {
         const pending = deferred()
         const result = resources()

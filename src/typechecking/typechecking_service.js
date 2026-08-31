@@ -846,8 +846,12 @@ export class TypecheckingService {
     if (workspaceDiagnosticsSubscription === this.workspaceDiagnosticsSubscription) {
       this.workspaceDiagnosticsSubscription = null
     }
-    client?.disconnect()
-    transport?.close()
+    const disconnecting = client?.disconnect()
+    if (disconnecting && typeof disconnecting.finally === 'function') {
+      void disconnecting.finally(() => transport?.close())
+    } else {
+      transport?.close()
+    }
   }
 
   closeRuntime() {
