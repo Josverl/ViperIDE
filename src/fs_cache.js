@@ -318,8 +318,6 @@ export class FsCache {
         return entry ? entry.size : null
     }
 
-    knownPaths() { return [...this._listing.keys()] }
-
     countUnder(path) {
         const prefix = (path === '/') ? '/' : path + '/'
         let count = 0

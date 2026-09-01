@@ -8,7 +8,7 @@
 
 import { basicSetup } from 'codemirror'
 import { EditorView, ViewPlugin, keymap, Decoration } from '@codemirror/view'
-import { EditorState, RangeSetBuilder, Prec, StateEffect } from '@codemirror/state'
+import { Compartment, EditorState, EditorSelection, RangeSetBuilder, Prec, StateEffect } from '@codemirror/state'
 import { StreamLanguage, indentUnit, syntaxTree, language } from '@codemirror/language'
 import { indentWithTab } from '@codemirror/commands'
 import { python } from '@codemirror/lang-python'
