@@ -465,14 +465,17 @@ async function applyTypecheckingSetting(enabled) {
 }
 
 function currentTypecheckingConfig() {
-    return catalogTypecheckingRuntimeConfig({
-        mode: getSetting('typecheck-mode'),
-        scope: getSetting('typecheck-scope'),
-        family: getSetting('typecheck-stub-family'),
-        port: getSetting('typecheck-stub-port'),
-        stubPackage: selectedTypecheckingStubPackage,
-        extraPaths: typecheckingExtraPaths,
-    })
+    return {
+        ...catalogTypecheckingRuntimeConfig({
+            mode: getSetting('typecheck-mode'),
+            scope: getSetting('typecheck-scope'),
+            family: getSetting('typecheck-stub-family'),
+            port: getSetting('typecheck-stub-port'),
+            stubPackage: selectedTypecheckingStubPackage,
+            extraPaths: typecheckingExtraPaths,
+        }),
+        shutdownTimeout: 5_000,
+    }
 }
 
 function queueTypecheckingWork(work, failureMessage) {
