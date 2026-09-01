@@ -26,6 +26,7 @@ def test_typechecking_autodetects_connected_vm(page, viperide_server, tmp_path):
     expect(page.locator("label[for=typecheck-autodetect]")).to_have_text("Autoselect stubs")
     expect(family).to_have_value("micropython")
     expect(port).to_have_value("webassembly")
+    expect(board).to_have_value("PYSCRIPT")
     expect(package).to_have_value(re.compile(r"^micropython-webassembly-stubs=="))
     for selector in (family, version, port, board):
         expect(selector).to_be_disabled()
