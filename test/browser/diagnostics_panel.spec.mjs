@@ -138,6 +138,9 @@ test("test_pyright_diagnostics_are_merged_with_host_linters", async ({ page }, t
   await page.locator(".cm-content").fill("import micropython\n");
   await expect(badge).toHaveAttribute("data-severity", "warning", { timeout: 30_000 });
   await expect(badge).toHaveCSS("background-color", "rgb(255, 238, 136)");
+  await expect(
+    page.locator('.diagnostic-item:has-text("micropython")'),
+  ).toHaveCount(2);
 
   await page
     .locator(".cm-content")

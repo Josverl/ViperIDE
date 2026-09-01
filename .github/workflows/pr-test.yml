@@ -26,7 +26,7 @@ jobs:
   browser-test:
     runs-on: ubuntu-latest
     container:
-      image: mcr.microsoft.com/playwright/python:v1.55.0-noble
+      image: mcr.microsoft.com/playwright:v1.55.0-noble
       options: --user 1001
     timeout-minutes: 15
     strategy:
@@ -36,6 +36,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
 
       - name: Prepare
         run: python3 build.py --prepare
