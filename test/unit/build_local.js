@@ -91,8 +91,8 @@ describe('local package build', () => {
             assert.equal(calls[1].options.env.VIPER_IDE_LOCAL_PYRIGHT_WORKER_PACKAGE, workspace.pyrightWorker)
             if (mode === 'test') {
                 assert.deepEqual(calls[2], {
-                    command: 'uv',
-                    args: ['run', '--group', 'test', 'pytest', 'tests', '-v'],
+                    command: 'npm',
+                    args: ['run', 'test:browser'],
                     options: { cwd: projectRoot, env: calls[1].options.env },
                 })
             } else {

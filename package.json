@@ -11,7 +11,8 @@
     "start:local": "node scripts/build-local.mjs start",
     "lint": "npx eslint",
     "test": "npx mocha && npm run test:unit",
-    "test:browser": "uv run --group test pytest tests -v",
+    "test:browser": "playwright test",
+    "test:browser:ui": "playwright test --ui",
     "test:local": "node scripts/build-local.mjs test",
     "test:unit": "npx mocha --no-config \"test/unit/**/*.js\""
   },
