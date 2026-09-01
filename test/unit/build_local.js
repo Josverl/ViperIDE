@@ -92,12 +92,7 @@ describe('local package build', () => {
             if (mode === 'test') {
                 assert.deepEqual(calls[2], {
                     command: 'uv',
-                    args: [
-                        'run',
-                        '--with', 'pytest',
-                        '--with', 'pytest-playwright',
-                        'pytest', 'tests', '-v',
-                    ],
+                    args: ['run', '--group', 'test', 'pytest', 'tests', '-v'],
                     options: { cwd: projectRoot, env: calls[1].options.env },
                 })
             } else {

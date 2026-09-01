@@ -138,6 +138,9 @@ let reconnectToken = 0
 let intentionalDisconnect = false
 const typecheckingExtraPaths = ['/workspace/lib']
 let typecheckingAction = Promise.resolve()
+/* Startup resolves the stub package after the runtime is up, so the first ready
+   runtime is still replaced; report busy until the queue drains */
+let typecheckingPendingWork = 0
 let diagnosticsFilters = normalizeDiagnosticsFilters()
 let selectedTypecheckingStubPackage = null
 let syncingTypecheckingStubSelectors = false
@@ -204,10 +207,11 @@ function setDeviceState(newState) {
 
 function updateTypecheckingUI(snapshot = typechecking.snapshot()) {
     const packageControlsEnabled = getSetting('typecheck-enabled') && snapshot.status === 'ready'
+    const settling = typecheckingPendingWork > 0 && snapshot.status === 'ready'
     renderTypecheckingStatus(
         QID('typecheck-tab'),
         QID('typecheck-enabled'),
-        snapshot,
+        settling ? { ...snapshot, status: 'starting' } : snapshot,
         getSetting('typecheck-enabled'),
         T('tool.problems'),
     )
@@ -471,20 +475,32 @@ function currentTypecheckingConfig() {
     })
 }
 
-function queueTypecheckingSetting(enabled) {
+function queueTypecheckingWork(work, failureMessage) {
+    typecheckingPendingWork++
+    updateTypecheckingUI()
     typecheckingAction = typecheckingAction.
-        then(() => applyTypecheckingSetting(enabled)).
-        catch(err => report(enabled ? 'Unable to start type checking' : 'Unable to disable type checking', err))
+        then(work).
+        catch(err => report(failureMessage, err)).
+        finally(() => {
+            typecheckingPendingWork--
+            updateTypecheckingUI()
+        })
     return typecheckingAction
+}
+
+function queueTypecheckingSetting(enabled) {
+    return queueTypecheckingWork(
+        () => applyTypecheckingSetting(enabled),
+        enabled ? 'Unable to start type checking' : 'Unable to disable type checking',
+    )
 }
 
 function queueTypecheckingDeviceSelection() {
     if (!getSetting('typecheck-autodetect')) { return queueTypecheckingReconfiguration() }
-    typecheckingAction = typecheckingAction.
-        then(updateTypecheckingStubSelectors).
-        then(() => applyTypecheckingReconfiguration()).
-        catch(err => report('Unable to autodetect type stubs', err))
-    return typecheckingAction
+    return queueTypecheckingWork(
+        () => updateTypecheckingStubSelectors().then(() => applyTypecheckingReconfiguration()),
+        'Unable to autodetect type stubs',
+    )
 }
 
 async function applyTypecheckingReconfiguration({ syncWorkspace = false } = {}) {
@@ -499,10 +515,10 @@ async function applyTypecheckingReconfiguration({ syncWorkspace = false } = {}) 
 }
 
 function queueTypecheckingReconfiguration(options = {}) {
-    typecheckingAction = typecheckingAction.
-        then(() => applyTypecheckingReconfiguration(options)).
-        catch(err => report('Unable to apply type-checking settings', err))
-    return typecheckingAction
+    return queueTypecheckingWork(
+        () => applyTypecheckingReconfiguration(options),
+        'Unable to apply type-checking settings',
+    )
 }
 
 export function toggleTypechecking() {
@@ -2770,10 +2786,10 @@ function showOfflineReadyToast(version) {
     ]) {
         onSettingChange(id, () => {
             if (syncingTypecheckingStubSelectors) { pendingTypecheckingStubRefresh = true; return }
-            typecheckingAction = typecheckingAction.
-                then(updateTypecheckingStubSelectors).
-                then(() => applyTypecheckingReconfiguration()).
-                catch(err => report('Unable to select type stubs', err))
+            queueTypecheckingWork(
+                () => updateTypecheckingStubSelectors().then(() => applyTypecheckingReconfiguration()),
+                'Unable to select type stubs',
+            )
         })
     }
     QID('typecheck-stub-install').addEventListener('click', () => {

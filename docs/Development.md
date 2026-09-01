@@ -108,11 +108,25 @@ may identify the workspace root, its `packages` directory, either package
 directory, or either package's `package.json`. The command builds the local
 Pyright worker in development mode, bundles the local LSP client source, and
 copies the local worker assets into ViperIDE's `build/` directory.
-`test:local` uses `uv` to provide Pytest and the Playwright plugin, then runs
-the browser tests against that generated build.
+`test:local` runs the browser tests against that generated build.
 
 Normal `npm run build` builds against the registry versions installed in
 `node_modules`.
+
+## Browser tests
+
+The Playwright tests in `tests/` need a `build/` directory and the Python test
+dependencies declared in `pyproject.toml`. Install the browsers once, then run
+the suite against the current build:
+
+```sh
+uv run --group test playwright install chromium
+npm run test:browser
+```
+
+`uv` resolves `pytest` and `pytest-playwright` from the `test` dependency
+group, so plain `pytest` outside that environment fails with missing fixtures.
+Select another browser with `--browser firefox` or `--browser webkit`.
 
 
 ## Linting

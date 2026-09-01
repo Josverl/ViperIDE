@@ -100,12 +100,7 @@ export function runWithLocalPackages(mode, input, options = {}) {
 
   if (mode === 'test') {
     console.log('Running ViperIDE browser tests against the local-package build')
-    execute('uv', [
-      'run',
-      '--with', 'pytest',
-      '--with', 'pytest-playwright',
-      'pytest', 'tests', '-v',
-    ], { cwd: projectRoot, env: environment })
+    execute('uv', ['run', '--group', 'test', 'pytest', 'tests', '-v'], { cwd: projectRoot, env: environment })
   }
 }
 
