@@ -48,6 +48,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.62.1",
     "@rollup/plugin-commonjs": "^29.0.3",
     "@rollup/plugin-json": "^6.1.0",
     "@rollup/plugin-node-resolve": "^16.0.3",
@@ -56,6 +57,7 @@
     "chai": "^6.2.2",
     "eslint": "^10.8.1",
     "globals": "^17.9.0",
+    "http-server": "^14.1.1",
     "mocha": "^11.8.0",
     "rollup": "^4.62.4",
     "rollup-plugin-import-css": "^4.2.1",
