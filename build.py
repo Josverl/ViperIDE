@@ -146,7 +146,23 @@ if __name__ == "__main__":
     gen_translations("./src/lang/", "build/translations.json")
     gen_manifest("./src/manifest.json", "build/manifest.json")
 
+    rmtree("src/tools_vfs/lib/python_minifier", ignore_errors=True)
     vendor_pypi_package("python-minifier==3.2.0", "src/tools_vfs/lib")
+    # CPython permits starred arguments after keywords, but MicroPython does
+    # not. Keep this narrow compatibility rewrite until upstream supports it.
+    ast_compat = "src/tools_vfs/lib/python_minifier/ast_compat.py"
+    source = readfile(ast_compat)
+    replacements = {
+        "Constant(value=s, *args, **kwargs)": "Constant(*args, value=s, **kwargs)",
+        "Constant(value=n, *args, **kwargs)": "Constant(*args, value=n, **kwargs)",
+        "Constant(value=literal_eval('...'), *args, **kwargs)": "Constant(*args, value=literal_eval('...'), **kwargs)",
+    }
+    for old, new in replacements.items():
+        if old not in source:
+            raise RuntimeError(f"Expected python-minifier compatibility pattern missing: {old}")
+        source = source.replace(old, new)
+    with open(ast_compat, "w", encoding="utf-8") as f:
+        f.write(source)
     gen_tar("src/tools_vfs", "build/assets/tools_vfs.tar.gz")
     gen_tar("src/vm_vfs", "build/assets/vm_vfs.tar.gz")
 
