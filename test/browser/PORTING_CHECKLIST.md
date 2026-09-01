@@ -27,4 +27,4 @@ selected stub target in the title.
 | `test_typechecking_workflows.py::test_stub_port_changes_reanalyze_open_files` | Shared defaults; open files | Ready (90,000 ms); unresolved `rp2` row appears (30,000 ms); rp2 title (90,000 ms) clears it (30,000 ms); esp32 title (90,000 ms) restores it (30,000 ms); content preserved | `typechecking-rp2-stubs-resolve-import.png` | Yes |
 
 Baseline totals: 14 tests, one parametrized case, 15 distinct screenshot files,
-and 9 empty-console assertions.
+and 10 empty-console assertions.

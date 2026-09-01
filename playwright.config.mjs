@@ -5,6 +5,7 @@ const baseURL = "http://localhost:10001";
 export default defineConfig({
   testDir: "test/browser",
   testMatch: "**/*.spec.mjs",
+  workers: 1,
   timeout: 180_000,
   expect: {
     timeout: 5_000,
