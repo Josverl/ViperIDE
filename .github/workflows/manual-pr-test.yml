@@ -45,6 +45,11 @@ jobs:
         with:
           ref: ${{ inputs.target_ref }}
 
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
       - name: Prepare
         run: python3 build.py --prepare
 
