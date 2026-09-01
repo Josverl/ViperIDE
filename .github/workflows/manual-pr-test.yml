@@ -1,0 +1,68 @@
+name: Manual PR Tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_ref:
+        description: Branch, tag, or commit to test
+        required: true
+        default: feat/type_checking
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout target
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.target_ref }}
+
+      - name: Prepare
+        run: python3 build.py --prepare
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm run test
+
+      - name: Build
+        run: python3 build.py --skip-tests
+
+  browser-test:
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright/python:v1.55.0-noble
+      options: --user 1001
+    timeout-minutes: 15
+    steps:
+      - name: Checkout target
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.target_ref }}
+
+      - name: Prepare
+        run: python3 build.py --prepare
+
+      - name: Build
+        run: python3 build.py --skip-tests
+
+      - name: Verify Playwright version
+        run: test "$(npx playwright --version)" = "Version 1.55.0"
+
+      - name: Run browser tests
+        run: npx playwright test --project chromium
+
+      - name: Upload browser test failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-chromium-${{ github.run_attempt }}
+          path: |
+            results/playwright-report/
+            results/playwright/**/trace.zip
+          if-no-files-found: ignore
