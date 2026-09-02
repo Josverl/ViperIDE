@@ -21,8 +21,8 @@ function createWorkspace() {
     writeFileSync(join(root, 'package.json'), JSON.stringify({
         scripts: { 'build:worker:dev': 'webpack --mode development' },
     }))
-    writeFileSync(join(lspClient, 'package.json'), JSON.stringify({ name: '@mp-codemirror/lsp-client' }))
-    writeFileSync(join(pyrightWorker, 'package.json'), JSON.stringify({ name: '@mp-codemirror/pyright-worker' }))
+    writeFileSync(join(lspClient, 'package.json'), JSON.stringify({ name: '@mp-typing/lsp-client' }))
+    writeFileSync(join(pyrightWorker, 'package.json'), JSON.stringify({ name: '@mp-typing/pyright-worker' }))
     return { root, packages, lspClient, pyrightWorker }
 }
 

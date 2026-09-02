@@ -9,7 +9,7 @@ import {
   notifyDocumentChange,
   notifyDocumentClose,
   switchBoard,
-} from '@mp-codemirror/lsp-client'
+} from '@mp-typing/lsp-client'
 
 import { TypecheckingService } from './typechecking_service.js'
 import { typecheckingAssets } from './typechecking_assets.js'

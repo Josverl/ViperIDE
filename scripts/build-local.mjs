@@ -5,8 +5,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { spawnSync } from 'node:child_process'
 
 const PACKAGE_NAMES = Object.freeze({
-  lspClient: '@mp-codemirror/lsp-client',
-  pyrightWorker: '@mp-codemirror/pyright-worker',
+  lspClient: '@mp-typing/lsp-client',
+  pyrightWorker: '@mp-typing/pyright-worker',
 })
 const MODES = new Set(['build', 'start', 'test'])
 

@@ -19,7 +19,7 @@ const DEPLOYMENT_TAG = process.env.VIPER_IDE_DEPLOYMENT_TAG || ''
 // without changing package.json, package-lock.json, or node_modules.
 const LSP_CLIENT_PACKAGE = process.env.VIPER_IDE_LOCAL_LSP_CLIENT_PACKAGE || ''
 const PYRIGHT_WORKER_PACKAGE = process.env.VIPER_IDE_LOCAL_PYRIGHT_WORKER_PACKAGE ||
-  'node_modules/@mp-codemirror/pyright-worker'
+  'node_modules/@mp-typing/pyright-worker'
 const PYRIGHT_WORKER_BUILD = 'build/assets/pyright-worker'
 const MPY_PACKAGE = 'node_modules/@micropython/micropython-webassembly-pyscript'
 const MPY_WASM_BUILD = 'build/assets/micropython.wasm'
@@ -44,13 +44,13 @@ const localLspClient = () => {
   if (!LSP_CLIENT_PACKAGE) { return null }
   const packageJson = JSON.parse(fs.readFileSync(path.join(LSP_CLIENT_PACKAGE, 'package.json'), 'utf8'))
   const entry = packageJson.exports?.['.']?.import || packageJson.browserDistribution?.entry || packageJson.main
-  if (packageJson.name !== '@mp-codemirror/lsp-client' || !entry) {
-    throw new Error(`${LSP_CLIENT_PACKAGE} is not an @mp-codemirror/lsp-client package`)
+  if (packageJson.name !== '@mp-typing/lsp-client' || !entry) {
+    throw new Error(`${LSP_CLIENT_PACKAGE} is not an @mp-typing/lsp-client package`)
   }
   return {
     name: 'local-lsp-client',
     resolveId(source) {
-      return source === '@mp-codemirror/lsp-client'
+      return source === '@mp-typing/lsp-client'
         ? path.resolve(LSP_CLIENT_PACKAGE, entry)
         : null
     },
