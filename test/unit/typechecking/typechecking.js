@@ -339,6 +339,60 @@ describe('TypecheckingService', () => {
         assert.deepEqual(await query, [{ packageName: 'types-requests' }])
     })
 
+    it('keeps editor extensions installed while restarting the runtime', async () => {
+        const first = resources()
+        const second = resources()
+        const results = [first, second]
+        const configured = []
+        const service = new TypecheckingService({
+            createLSPClient: async () => results.shift(),
+            createLSPPlugin: (client) => [client === first.client ? 'first-lsp' : 'second-lsp'],
+            configureEditor: (_view, extensions) => {
+                configured.push(extensions)
+                return true
+            },
+            notifyDocumentClose: () => {},
+        })
+        await service.initialize({ workerUrl: 'blob:first' })
+        await service.bindEditor(editor(), 'main.py')
+
+        await service.restartRuntime({ workerUrl: 'blob:second' })
+
+        assert.deepEqual(configured, [['first-lsp'], ['second-lsp']])
+    })
+
+    it('removes preserved editor extensions when disabling after a failed restart', async () => {
+        const first = resources()
+        const configured = []
+        let clientCreations = 0
+        const service = new TypecheckingService({
+            createLSPClient: async () => {
+                clientCreations++
+                if (clientCreations === 2) { throw new Error('replacement failed') }
+                return first
+            },
+            createLSPPlugin: () => ['first-lsp'],
+            configureEditor: (_view, extensions) => {
+                configured.push(extensions)
+                return true
+            },
+            notifyDocumentClose: () => {},
+        })
+        await service.initialize({ workerUrl: 'blob:first' })
+        await service.bindEditor(editor(), 'main.py')
+
+        try {
+            await service.restartRuntime({ workerUrl: 'blob:second' })
+            assert.fail('Expected replacement runtime to fail')
+        } catch (error) {
+            assert.match(error.message, /replacement failed/)
+        }
+
+        assert.deepEqual(configured, [['first-lsp']])
+        assert.isTrue(service.disable())
+        assert.deepEqual(configured, [['first-lsp'], []])
+    })
+
     it('binds an editor with an encoded workspace URI', async () => {
         const result = resources()
         const configured = []

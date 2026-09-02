@@ -608,7 +608,7 @@ export class TypecheckingService {
     if (this.restarting) { return this.restarting }
     const config = { ...this.clientConfig, ...configOverrides }
     this.restarting = (async () => {
-      this.disable()
+      this.disable({ preserveEditorExtensions: true })
       await this.initialize(config)
       return this.snapshot()
     })()
@@ -672,19 +672,21 @@ export class TypecheckingService {
   /**
    * Stop type checking without discarding registered editor bindings or workspace files.
    *
+    * @param {{preserveEditorExtensions?: boolean}} [options={}] Keep the current editor
+    * extensions installed while replacing the runtime.
    * @returns {boolean} Whether the service transitioned to disabled.
    */
-  disable() {
+    disable({ preserveEditorExtensions = false } = {}) {
     if (this.status === 'disabled') { return false }
     if (this.status === 'starting' || this.status === 'switching') {
       throw new Error(`TypecheckingService cannot be disabled while ${this.status}`)
     }
 
-    if (this.client) {
-      for (const [editorView, binding] of this.editorBindings) {
-        if (this.documentVersions.has(binding.uri)) {
+    for (const [editorView, binding] of this.editorBindings) {
+      if (this.client && this.documentVersions.has(binding.uri)) {
           this.notifyDocumentClose(this.client, binding.uri)
-        }
+      }
+      if (!preserveEditorExtensions) {
         this.configureEditor?.(editorView, [])
       }
     }
