@@ -22,6 +22,7 @@ npm install --include=dev
 | `docs/` | User and contributor documentation |
 | `packages/viper-tools/` | MicroPython helper package metadata and files |
 | `mcp/` | MCP server for controlling ViperIDE from an AI client |
+| `src/typechecking/` | Application-owned adapter around the reusable type-checking packages (see [Type-Checking](Type-Checking.md)) |
 | `build.py` | Production build script used by GitHub Pages deployment |
 | `rollup.config.mjs` | Rollup bundle configuration |
 
