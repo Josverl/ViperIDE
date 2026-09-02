@@ -338,7 +338,7 @@ variant=''
 if '+' in board_id: board_id,variant=board_id.split('+',1)
 cpu=u[4].split(' with ',1)[1] if ' with ' in u[4] else ''
 sp=':'.join(sys.path)
-d=[u[4],id.hex(),u[2],u[0],v,sys.platform,build,(mpy>>10)&0x0F,mpy&0xFF,(mpy>>8)&3,sp,family,fwv,port,board_id,variant,cpu]
+d=[u[4],''.join('%02x'%byte for byte in id),u[2],u[0],v,sys.platform,build,(mpy>>10)&0x0F,mpy&0xFF,(mpy>>8)&3,sp,family,fwv,port,board_id,variant,cpu]
 print('|'.join(str(x) for x in d))
 `)
         let [machine, uid, release, sysname, version, platform, build, mpy_arch, mpy_ver, mpy_sub,
