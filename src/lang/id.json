@@ -40,6 +40,7 @@
             "refresh-after-run": "Segarkan file setelah dijalankan",
             "auto-soft-reset": "Soft Reset sebelum dijalankan",
             "typecheck-enabled": "Aktifkan pemeriksaan tipe",
+            "typecheck-viper-tools-stubs": "Sertakan stub alat Viper",
             "typecheck-mode": "Mode pemeriksaan tipe",
             "typecheck-scope": "File yang diperiksa tipenya",
             "typecheck-stub-family": "Keluarga",

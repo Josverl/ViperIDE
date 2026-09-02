@@ -40,6 +40,7 @@
             "refresh-after-run": "Bestanden vernieuwen na uitvoeren",
             "auto-soft-reset": "Soft Reset voor uitvoeren",
             "typecheck-enabled": "Typecontrole inschakelen",
+            "typecheck-viper-tools-stubs": "Viper-tools-stubs gebruiken",
             "typecheck-mode": "Typecontrolemodus",
             "typecheck-scope": "Te controleren bestanden",
             "typecheck-stub-family": "Familie",

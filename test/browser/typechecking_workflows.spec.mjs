@@ -239,3 +239,33 @@ test("test_stub_port_changes_reanalyze_open_files", async ({ page, consoleErrors
   await expect(editor).toContainText("import rp2");
   expect(consoleErrors).toEqual([]);
 });
+
+// Verifies the client-owned Viper tools overlay can be toggled without replacing board stubs.
+test("test_viper_tools_stubs_toggle_import_resolution", async ({ page, consoleErrors }) => {
+  await configureTypechecking(page, {
+    "advanced-mode": true,
+    "typecheck-scope": "openFilesOnly",
+  });
+  await page.goto("/?vm=1", { waitUntil: "domcontentloaded" });
+
+  const status = await expectVmTypecheckingReady(page);
+  const editor = page.locator(".editor-tab-pane.active .cm-content");
+  const missingBleNus = pyrightRows(page, "/main.py").filter({
+    hasText: 'Import "ble_nus" could not be resolved',
+  });
+
+  await editor.fill("import ble_nus\n");
+  await page.locator('[data-target="diagnostics"]').click();
+  await expect(missingBleNus).toHaveCount(0, { timeout: 30_000 });
+
+  await page.locator('[data-target="menu-settings"]').click();
+  const viperToolsStubs = page.locator("#typecheck-viper-tools-stubs");
+  await viperToolsStubs.uncheck();
+  await expect(missingBleNus).toHaveCount(1, { timeout: 90_000 });
+  await expect(status).toHaveAttribute("title", /standard mode with esp32 stubs/);
+
+  await viperToolsStubs.check();
+  await expect(missingBleNus).toHaveCount(0, { timeout: 90_000 });
+
+  expect(consoleErrors).toEqual([]);
+});

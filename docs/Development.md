@@ -113,6 +113,28 @@ copies the local worker assets into ViperIDE's `build/` directory.
 Normal `npm run build` builds against the registry versions installed in
 `node_modules`.
 
+### Client-owned type-stub overlays
+
+ViperIDE owns the release lifecycle of stubs for modules bundled with
+ViperIDE, including `viper-tools-stubs`.
+
+| ViperIDE release process | Reusable type-checking backend |
+|---|---|
+| Selects and obtains the type-only wheel. | Defines the generic `extraStubArchives` contract. |
+| Vendors or publishes the archive. | Forwards host-provided archive metadata. |
+| Computes and supplies its byte size, SHA-256, URL/data, and allowed origins. | Validates integrity and rejects unsafe or non-type-only content. |
+| Owns the user setting, default, restart behavior, errors, and update cadence. | Mounts accepted stubs under `/extra/<package>` and configures Pyright. |
+
+The backend does not build, publish, select, or bundle ViperIDE wheels. Its npm
+artifacts and runtime manifest remain client-neutral. Adding or updating a
+ViperIDE overlay changes ViperIDE's assets and configuration only; it does not
+require rebuilding or releasing the worker.
+
+The standalone `viper-tools-stubs` project produces a normal wheel with
+`uv build`. ViperIDE's release process is responsible for turning the selected
+wheel into a deployed, integrity-described asset and passing it through
+`extraStubArchives`.
+
 ## Browser tests
 
 The Playwright tests in `test/browser/` need a current `build/` directory.

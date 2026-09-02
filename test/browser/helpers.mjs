@@ -2,6 +2,7 @@ import { expect } from "@playwright/test";
 
 const defaultTypecheckingSettings = {
   "typecheck-enabled": true,
+  "typecheck-viper-tools-stubs": true,
   "typecheck-mode": "standard",
   "typecheck-scope": "workspace",
   "typecheck-autodetect": false,

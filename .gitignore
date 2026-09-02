@@ -7,3 +7,4 @@ extra/
 src/tools_vfs/lib/python_minifier/
 bun.lock
 results/playwright
+results/playwright-report

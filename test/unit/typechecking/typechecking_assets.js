@@ -14,6 +14,12 @@ const manifest = {
         { id: 'no-stubs', file: null, package: 'No Stubs' },
     ],
 }
+const viperToolsStubs = {
+    url: 'https://example.test/assets/viper-tools-stubs/' +
+        'viper_tools_stubs-0.1.2.0-py3-none-any.whl',
+    size: 6269,
+    sha256: '406e48b0033590622a06a5aa4c37b3982840d6cfb89a5c6d26d0462f7105c0b6',
+}
 
 function response({ json, bytes, status = 200 }) {
     return {
@@ -137,6 +143,56 @@ describe('TypecheckingAssets', () => {
         assert.match(runtime.boardStubsUrl, /stubs-test-board\.zip$/)
     })
 
+    it('adds the verified Viper tools wheel independently from board stubs', async () => {
+        const assets = new TypecheckingAssets({
+            packageBase: 'https://example.test/assets/pyright-worker/',
+            viperToolsStubs,
+            fetch: async () => response({ json: manifest }),
+        })
+
+        const runtime = await assets.prepare({ boardId: 'test-board', viperToolsStubs: true })
+
+        assert.match(runtime.boardStubsUrl, /stubs-test-board\.zip$/)
+        assert.deepEqual(runtime.extraStubArchives, [{
+            packageName: 'viper-tools-stubs',
+            archive: {
+                ...viperToolsStubs,
+                size: 6269,
+                allowedOrigins: ['https://example.test'],
+            },
+        }])
+    })
+
+    it('omits or explicitly replaces the bundled Viper tools overlay', async () => {
+        const requests = []
+        const assets = new TypecheckingAssets({
+            fetch: async url => {
+                requests.push(url)
+                return response({ json: manifest })
+            },
+        })
+
+        const disabled = await assets.prepare({ viperToolsStubs: false })
+        assert.deepEqual(disabled.extraStubArchives, [])
+        assert.lengthOf(requests, 1)
+
+        const replacement = {
+            packageName: 'viper_tools.stubs',
+            archive: { data: new ArrayBuffer(1), size: 1, sha256: 'a'.repeat(64) },
+        }
+        const overridden = await assets.prepare({
+            viperToolsStubs: true,
+            extraStubArchives: [replacement],
+        })
+        assert.deepEqual(overridden.extraStubArchives, [replacement])
+
+        const removed = await assets.prepare({
+            viperToolsStubs: false,
+            extraStubArchives: overridden.extraStubArchives,
+        })
+        assert.deepEqual(removed.extraStubArchives, [])
+    })
+
     it('uses the default fallback archive for a catalog-only board ID', async () => {
         const assets = new TypecheckingAssets({
             fetch: async () => response({ json: manifest }),
@@ -222,8 +278,7 @@ describe('TypecheckingAssets', () => {
 
         assert.isString(runtime.runtimeManifestUrl)
         assert.match(runtime.runtimeManifestUrl, /assets\/runtime-manifest\.json$/)
-        assert.isArray(runtime.runtimeAllowedOrigins)
-        assert.lengthOf(runtime.runtimeAllowedOrigins, 1)
+        assert.isUndefined(runtime.runtimeAllowedOrigins)
         assert.strictEqual(runtime.runtimeCacheName, 'viperide-pyright-runtime')
         assert.strictEqual(runtime.runtimeStorageKey, 'viperide-pyright-runtime-lkg')
         // workerUrl is always present as bundled fallback

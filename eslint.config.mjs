@@ -25,6 +25,9 @@ export default [
         VIPER_IDE_VERSION:  "readonly",
         VIPER_IDE_BUILD:    "readonly",
         VIPER_IDE_BASE_URL: "readonly",
+        VIPER_TOOLS_STUBS_FILENAME: "readonly",
+        VIPER_TOOLS_STUBS_SIZE:     "readonly",
+        VIPER_TOOLS_STUBS_SHA256:   "readonly",
       }
     }
   }

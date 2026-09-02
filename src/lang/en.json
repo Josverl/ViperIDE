@@ -41,6 +41,7 @@
             "refresh-after-run": "Refresh files after run",
             "auto-soft-reset": "Soft Reset before run",
             "typecheck-enabled": "Enable type checking",
+            "typecheck-viper-tools-stubs": "Include Viper tools stubs",
             "typecheck-mode": "Typecheck mode",
             "typecheck-scope": "Typecheck files",
             "typecheck-autodetect": "Autoselect stubs",

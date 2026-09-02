@@ -40,6 +40,7 @@
             "refresh-after-run": "Оновлювати файли після запуску",
             "auto-soft-reset": "Soft Reset перед запуском",
             "typecheck-enabled": "Увімкнути перевірку типів",
+            "typecheck-viper-tools-stubs": "Додати стаби інструментів Viper",
             "typecheck-mode": "Режим перевірки типів",
             "typecheck-scope": "Файли для перевірки типів",
             "typecheck-stub-family": "Сімейство",

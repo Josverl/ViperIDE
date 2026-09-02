@@ -40,6 +40,7 @@
             "refresh-after-run": "Actualiser les fichiers après l'exécution",
             "auto-soft-reset": "Soft Reset avant l'exécution",
             "typecheck-enabled": "Activer la vérification des types",
+            "typecheck-viper-tools-stubs": "Inclure les stubs des outils Viper",
             "typecheck-mode": "Mode de vérification des types",
             "typecheck-scope": "Fichiers à vérifier",
             "typecheck-stub-family": "Famille",

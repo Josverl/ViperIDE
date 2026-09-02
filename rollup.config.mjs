@@ -6,6 +6,7 @@ import terser from '@rollup/plugin-terser'
 import css from 'rollup-plugin-import-css'
 import serve from 'rollup-plugin-serve'
 import sourcemaps from 'rollup-plugin-sourcemaps2';
+import { createHash } from 'node:crypto'
 import fs from 'fs'
 import path from 'path'
 
@@ -23,6 +24,9 @@ const PYRIGHT_WORKER_PACKAGE = process.env.VIPER_IDE_LOCAL_PYRIGHT_WORKER_PACKAG
 const PYRIGHT_WORKER_BUILD = 'build/assets/pyright-worker'
 const MPY_PACKAGE = 'node_modules/@micropython/micropython-webassembly-pyscript'
 const MPY_WASM_BUILD = 'build/assets/micropython.wasm'
+const VIPER_TOOLS_STUBS_SOURCE = 'assets/viper-tools-stubs'
+const VIPER_TOOLS_STUBS_BUILD = 'build/assets/viper-tools-stubs'
+let viperToolsStubs
 
 const copyPyrightWorkerPackage = () => {
   fs.rmSync(PYRIGHT_WORKER_BUILD, { recursive: true, force: true })
@@ -38,6 +42,27 @@ const copyPyrightWorkerPackage = () => {
 
 const copyMicroPythonWasm = () => {
   fs.copyFileSync(`${MPY_PACKAGE}/micropython.wasm`, MPY_WASM_BUILD)
+}
+
+const copyViperToolsStubs = () => {
+  const wheels = fs.readdirSync(VIPER_TOOLS_STUBS_SOURCE).
+    filter(filename => filename.endsWith('.whl'))
+  if (wheels.length !== 1) {
+    throw new Error(`${VIPER_TOOLS_STUBS_SOURCE}: expected exactly one wheel`)
+  }
+
+  const filename = wheels[0]
+  const wheelPath = path.join(VIPER_TOOLS_STUBS_SOURCE, filename)
+  const wheel = fs.readFileSync(wheelPath)
+  viperToolsStubs = {
+    filename,
+    size: wheel.byteLength,
+    sha256: createHash('sha256').update(wheel).digest('hex'),
+  }
+
+  fs.rmSync(VIPER_TOOLS_STUBS_BUILD, { recursive: true, force: true })
+  fs.mkdirSync(VIPER_TOOLS_STUBS_BUILD, { recursive: true })
+  fs.copyFileSync(wheelPath, path.join(VIPER_TOOLS_STUBS_BUILD, filename))
 }
 
 const localLspClient = () => {
@@ -141,6 +166,9 @@ const common = (args, name) => ({
         VIPER_IDE_VERSION:  '"' + pkg.version + '"',
         VIPER_IDE_BUILD:    Date.now(),
         VIPER_IDE_BASE_URL: '"' + BASE_URL + '"',
+        VIPER_TOOLS_STUBS_FILENAME: JSON.stringify(viperToolsStubs.filename),
+        VIPER_TOOLS_STUBS_SIZE: String(viperToolsStubs.size),
+        VIPER_TOOLS_STUBS_SHA256: JSON.stringify(viperToolsStubs.sha256),
       }
     }),
     args.configDebug && sourcemaps(),
@@ -156,6 +184,7 @@ const common = (args, name) => ({
 export default args => {
   copyPyrightWorkerPackage()
   copyMicroPythonWasm()
+  copyViperToolsStubs()
   return [{
     input: './src/app.js',
     ...common(args, 'app')

@@ -40,6 +40,7 @@
             "refresh-after-run": "运行后刷新文件",
             "auto-soft-reset": "运行前 Soft Reset",
             "typecheck-enabled": "启用类型检查",
+            "typecheck-viper-tools-stubs": "包含 Viper 工具存根",
             "typecheck-mode": "类型检查模式",
             "typecheck-scope": "要进行类型检查的文件",
             "typecheck-stub-family": "系列",

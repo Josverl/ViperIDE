@@ -3,22 +3,31 @@
  * SPDX-License-Identifier: MIT
  */
 
-const PACKAGE_BASE = new URL(
-  'assets/pyright-worker/',
-  globalThis.document?.baseURI || 'http://localhost:10001/',
-).href
+const DOCUMENT_BASE = globalThis.document?.baseURI
+const PACKAGE_BASE = DOCUMENT_BASE
+  ? new URL('assets/pyright-worker/', DOCUMENT_BASE).href
+  : 'assets/pyright-worker/'
 
 /** Runtime manifest URL derived from the deployed copied worker assets. */
 const DEFAULT_RUNTIME_MANIFEST_URL = `${PACKAGE_BASE}assets/runtime-manifest.json`
 
 /** Origin of the deployed assets, permitted for manifest and runtime asset fetches. */
-const DEFAULT_RUNTIME_ALLOWED_ORIGINS = [new URL(PACKAGE_BASE).origin]
+const DEFAULT_RUNTIME_ALLOWED_ORIGINS = DOCUMENT_BASE ? [new URL(PACKAGE_BASE).origin] : null
 
 /** Cache Storage namespace for last-known-good runtime selection. */
 const DEFAULT_RUNTIME_CACHE_NAME = 'viperide-pyright-runtime'
 
 /** localStorage key for last-known-good runtime metadata. */
 const DEFAULT_RUNTIME_STORAGE_KEY = 'viperide-pyright-runtime-lkg'
+
+const DEFAULT_VIPER_TOOLS_STUBS = DOCUMENT_BASE && typeof VIPER_TOOLS_STUBS_FILENAME === 'string' ? {
+  url: new URL(
+    `assets/viper-tools-stubs/${VIPER_TOOLS_STUBS_FILENAME}`,
+    DOCUMENT_BASE,
+  ).href,
+  size: VIPER_TOOLS_STUBS_SIZE,
+  sha256: VIPER_TOOLS_STUBS_SHA256,
+} : null
 
 /**
  * Load worker metadata from the npm package assets copied into the ViperIDE build.
@@ -40,6 +49,8 @@ export class TypecheckingAssets {
    *   Defaults to the `packageBase` origin.
    * @param {string} [dependencies.runtimeCacheName] Cache Storage namespace.
    * @param {string} [dependencies.runtimeStorageKey] localStorage last-known-good key.
+    * @param {{url: string, size: number, sha256: string}} [dependencies.viperToolsStubs]
+    *   Build-generated Viper tools wheel metadata.
    */
   constructor({
     // Browser fetch implementations may require their global object as the receiver.
@@ -49,17 +60,20 @@ export class TypecheckingAssets {
     runtimeAllowedOrigins = DEFAULT_RUNTIME_ALLOWED_ORIGINS,
     runtimeCacheName = DEFAULT_RUNTIME_CACHE_NAME,
     runtimeStorageKey = DEFAULT_RUNTIME_STORAGE_KEY,
+    viperToolsStubs = DEFAULT_VIPER_TOOLS_STUBS,
   } = {}) {
     if (typeof fetchAsset !== 'function') {
       throw new TypeError('TypecheckingAssets requires fetch')
     }
     this.fetchAsset = fetchAsset
+    if (!packageBase) { throw new TypeError('TypecheckingAssets requires packageBase') }
     this.packageBase = packageBase.endsWith('/') ? packageBase : `${packageBase}/`
     this.manifestPromise = null
     this.runtimeManifestUrl = runtimeManifestUrl || null
     this.runtimeAllowedOrigins = runtimeAllowedOrigins || null
     this.runtimeCacheName = runtimeCacheName
     this.runtimeStorageKey = runtimeStorageKey
+    this.viperToolsStubs = viperToolsStubs
   }
 
   /**
@@ -71,34 +85,65 @@ export class TypecheckingAssets {
    * fields that `createLSPClient` uses to select a compatible immutable
    * runtime without an app rebuild.
    *
-   * @param {string|{boardId?: string}} [config={}] Requested board or configuration.
+    * @param {string|{boardId?: string, viperToolsStubs?: boolean,
+    *   extraStubArchives?: object[]}} [config={}] Requested board or configuration.
    * @returns {Promise<object>} Worker URL, runtime options, board package/fallback, and manifest entry.
    */
   async prepare(config = {}) {
     const manifest = await this.loadManifest()
-    const boardId = typeof config === 'string' ? config : config.boardId
+    const requestedConfig = typeof config === 'string' ? { boardId: config } : config
+    const boardId = requestedConfig.boardId
     const selectedId = boardId || manifest.default
     const board = manifest.boards.find(item => item.id === selectedId) ||
-      (config.boardStubPackage && manifest.boards.find(item => item.id === manifest.default))
+      (requestedConfig.boardStubPackage && manifest.boards.find(item => item.id === manifest.default))
     if (!board) {
       throw new Error(`Unknown type-checking stub bundle: ${selectedId}`)
     }
+
+    const extraStubArchives = await this.extraStubArchives(requestedConfig)
 
     return {
       workerUrl: `${this.packageBase}dist/pyright_worker.js`,
       ...this.runtimeOptions(),
       boardStubs: board.file ? undefined : false,
       ...(board.file ? { boardStubsUrl: `${this.packageBase}assets/${board.file}` } : {}),
-      ...(config.boardStubPackage || (board.file && board.package)
+      ...(requestedConfig.boardStubPackage || (board.file && board.package)
         ? {
-            boardStubPackage: config.boardStubPackage || {
+            boardStubPackage: requestedConfig.boardStubPackage || {
                 packageName: board.package,
                 fallbackToBundled: true,
               },
           }
         : {}),
+      extraStubArchives,
       stubBundle: Object.freeze({ ...board, id: selectedId }),
     }
+  }
+
+  async extraStubArchives(config) {
+    const archives = new Map()
+    const normalizePackageName = archive =>
+      String(archive.packageName || '').trim().toLowerCase().replace(/[-_.]+/g, '-')
+    const providedArchives = (config.extraStubArchives || []).filter(
+      archive => config.viperToolsStubs !== false || normalizePackageName(archive) !== 'viper-tools-stubs',
+    )
+    const replacesViperTools = providedArchives.some(
+      archive => normalizePackageName(archive) === 'viper-tools-stubs',
+    )
+    if (config.viperToolsStubs === true && !replacesViperTools) {
+      if (!this.viperToolsStubs) { throw new Error('Viper tools stubs are not bundled') }
+      archives.set('viper-tools-stubs', {
+        packageName: 'viper-tools-stubs',
+        archive: {
+          ...this.viperToolsStubs,
+          allowedOrigins: [new URL(this.viperToolsStubs.url).origin],
+        },
+      })
+    }
+    for (const archive of providedArchives) {
+      archives.set(normalizePackageName(archive), archive)
+    }
+    return [...archives.values()]
   }
 
   /**

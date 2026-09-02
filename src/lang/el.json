@@ -40,6 +40,7 @@
             "refresh-after-run": "Ανανέωση αρχείων μετά την εκτέλεση",
             "auto-soft-reset": "Soft Reset πριν από την εκτέλεση",
             "typecheck-enabled": "Ενεργοποίηση ελέγχου τύπων",
+            "typecheck-viper-tools-stubs": "Συμπερίληψη stubs εργαλείων Viper",
             "typecheck-mode": "Λειτουργία ελέγχου τύπων",
             "typecheck-scope": "Αρχεία για έλεγχο τύπων",
             "typecheck-stub-family": "Οικογένεια",

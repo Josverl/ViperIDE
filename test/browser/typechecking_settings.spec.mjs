@@ -99,6 +99,7 @@ test("test_typechecking_mode_and_stub_selection_persist", async ({ page, console
   await page.goto("/?vm=1", { waitUntil: "domcontentloaded" });
 
   const status = page.locator("#typecheck-tab");
+  const viperToolsStubs = page.locator("#typecheck-viper-tools-stubs");
   const mode = page.locator("#typecheck-mode");
   const scope = page.locator("#typecheck-scope");
   const autodetect = page.locator("#typecheck-autodetect");
@@ -122,6 +123,13 @@ test("test_typechecking_mode_and_stub_selection_persist", async ({ page, console
   );
 
   await settingsTab.click();
+  await expect(viperToolsStubs).toBeChecked();
+  await expect(page.locator("label[for=typecheck-viper-tools-stubs]")).toHaveText(
+    "Include Viper tools stubs",
+  );
+  expect(
+    await page.evaluate(() => JSON.parse(localStorage.getItem("settings"))["typecheck-viper-tools-stubs"]),
+  ).toBe(true);
   await expect(mode).toHaveValue("standard");
   await expect(scope).toHaveValue("openFilesOnly");
   await expect(autodetect).not.toBeChecked();
@@ -197,6 +205,18 @@ test("test_typechecking_mode_and_stub_selection_persist", async ({ page, console
   await expect(port).toHaveValue("rp2");
   await expect(board).toHaveValue("RPI_PICO_W");
   await expect(packageInput).toHaveValue(/^micropython-rp2-rpi-pico-w-stubs==/);
+
+  await settingsTab.click();
+  await advancedMode.check();
+  await viperToolsStubs.uncheck();
+  await expect(status).toHaveAttribute("data-state", "ready", { timeout: 90_000 });
+  expect(
+    await page.evaluate(() => JSON.parse(localStorage.getItem("settings"))["typecheck-viper-tools-stubs"]),
+  ).toBe(false);
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await expect(status).toHaveAttribute("data-state", "ready", { timeout: 90_000 });
+  await settingsTab.click();
+  await expect(viperToolsStubs).not.toBeChecked();
 
   await editor.fill("def identity(value):\n    return value\n");
   await expect(page.locator("#diagnostics-badge")).not.toBeEmpty({ timeout: 30_000 });

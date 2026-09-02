@@ -474,6 +474,7 @@ function currentTypecheckingConfig() {
             stubPackage: selectedTypecheckingStubPackage,
             extraPaths: typecheckingExtraPaths,
         }),
+        viperToolsStubs: getSetting('typecheck-viper-tools-stubs'),
         shutdownTimeout: 5_000,
     }
 }
@@ -2777,6 +2778,7 @@ function showOfflineReadyToast(version) {
     onSettingChange('typecheck-mode', queueTypecheckingReconfiguration)
     onSettingChange('typecheck-scope', () =>
         queueTypecheckingReconfiguration({ syncWorkspace: true }))
+    onSettingChange('typecheck-viper-tools-stubs', queueTypecheckingReconfiguration)
     onSettingChange('typecheck-autodetect', () => {
         updateTypecheckingStubApplicability()
         queueTypecheckingDeviceSelection()

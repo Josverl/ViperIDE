@@ -40,6 +40,7 @@
             "refresh-after-run": "Reîmprospătează fișierele după rulare",
             "auto-soft-reset": "Soft Reset înainte de rulare",
             "typecheck-enabled": "Activează verificarea tipurilor",
+            "typecheck-viper-tools-stubs": "Include stuburile instrumentelor Viper",
             "typecheck-mode": "Mod de verificare a tipurilor",
             "typecheck-scope": "Fișiere de verificat",
             "typecheck-stub-family": "Familie",

@@ -22,6 +22,7 @@ describe('browser test helpers', () => {
         assert.equal(typeof initScript, 'function')
         assert.deepEqual(settings, {
             'typecheck-enabled': true,
+            'typecheck-viper-tools-stubs': true,
             'typecheck-mode': 'standard',
             'typecheck-scope': 'openFilesOnly',
             'typecheck-autodetect': false,

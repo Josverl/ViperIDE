@@ -40,6 +40,7 @@
             "refresh-after-run": "تحديث الملفات بعد التشغيل",
             "auto-soft-reset": "Soft Reset قبل التشغيل",
             "typecheck-enabled": "تمكين فحص الأنواع",
+            "typecheck-viper-tools-stubs": "تضمين تعريفات أنواع أدوات Viper",
             "typecheck-mode": "وضع فحص الأنواع",
             "typecheck-scope": "الملفات المراد فحص أنواعها",
             "typecheck-stub-family": "العائلة",
