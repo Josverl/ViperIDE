@@ -31,10 +31,10 @@ export function collectConsoleErrors(page) {
 
 export async function createPythonFile(page, filePath, content) {
   const workspacePath = filePath.startsWith("/") ? filePath : `/${filePath}`;
-  page.once("dialog", async (dialog) => {
-    await dialog.accept(filePath);
-  });
-  await page.evaluate(() => globalThis.app.createNewFile("/"));
+  const createFile = page.evaluate(() => globalThis.app.createNewFile("/"));
+  await page.locator("#user-input-value").fill(filePath);
+  await page.locator("#user-input-confirm").click();
+  await createFile;
   await expect(page.locator("#editor-tabs .tab.active")).toHaveAttribute("data-fn", workspacePath);
   await page.locator(".editor-tab-pane.active .cm-content").fill(content);
 }

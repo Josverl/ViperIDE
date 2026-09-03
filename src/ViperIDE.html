@@ -337,6 +337,17 @@
             </div>
         </div>
     </div>
+    <dialog id="user-input-dialog" aria-labelledby="user-input-dialog-title">
+        <form method="dialog">
+            <div id="user-input-dialog-title"></div>
+            <label id="user-input-label" for="user-input-value"></label>
+            <input id="user-input-value" type="text" autocomplete="off" required />
+            <div class="dialog-actions">
+                <button type="submit" value="cancel" formnovalidate>Cancel</button>
+                <button id="user-input-confirm" type="submit" value="confirm">OK</button>
+            </div>
+        </form>
+    </dialog>
     <div id="dpi-ruler" style="position:absolute;height:1in;width:1in;left:-100%;top:-100%;"></div>
 
     <script src="./app.js"></script>

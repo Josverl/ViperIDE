@@ -33,6 +33,21 @@ test(
 
     await expect(status).toHaveAttribute("data-state", "disabled");
     await expect(enabled).not.toBeChecked();
+    for (const id of [
+      "typecheck-mode",
+      "typecheck-scope",
+      "typecheck-autodetect",
+      "typecheck-stub-family",
+      "typecheck-stub-version",
+      "typecheck-stub-port",
+      "typecheck-stub-board",
+      "typecheck-viper-tools-stubs",
+      "typecheck-stub-package",
+      "typecheck-stub-install",
+      "typecheck-stub-clear",
+    ]) {
+      await expect(page.locator(`#${id}`)).toBeDisabled();
+    }
     await expect(editorArea).toBeVisible();
     expect(
       await page.evaluate(() => JSON.parse(localStorage.getItem("settings"))["typecheck-enabled"]),
@@ -43,6 +58,13 @@ test(
     await expect(status).toHaveAttribute("data-state", "ready", { timeout: 90_000 });
     await expect(status).toHaveAttribute("data-state", "ready");
     await expect(enabled).toBeChecked();
+    await expect(page.locator("#typecheck-mode")).toBeEnabled();
+    await expect(page.locator("#typecheck-scope")).toBeEnabled();
+    await expect(page.locator("#typecheck-autodetect")).toBeEnabled();
+    await expect(page.locator("#typecheck-viper-tools-stubs")).toBeEnabled();
+    await expect(page.locator("#typecheck-stub-package")).toBeEnabled();
+    await expect(page.locator("#typecheck-stub-install")).toBeEnabled();
+    await expect(page.locator("#typecheck-stub-clear")).toBeEnabled();
     await expect(editorArea).toBeVisible();
     expect(consoleErrors).toEqual([]);
     expect(componentInfo).toEqual([]);

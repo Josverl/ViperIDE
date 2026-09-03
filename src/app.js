@@ -48,7 +48,7 @@ import * as amplitude from '@amplitude/analytics-browser'
 import { splitPath, joinPath, sleep, fetchJSON, escapeCSS, sizeFmt, report } from './utils.js'
 import { getUserUID, getScreenInfo, IdleMonitor, getCssPropertyValue, QSA, QS, QID, iOS,
          sanitizeHTML, indicateActivity, setupTabs,
-         readDroppedFiles } from './utils_browser.js'
+         readDroppedFiles, requestUserValue } from './utils_browser.js'
 
 import { TreeView, parentDir, TREE_DRAG_TYPE } from './tree_view.js'
 import fsCache from './fs_cache.js'
@@ -206,15 +206,24 @@ function setDeviceState(newState) {
 }
 
 function updateTypecheckingUI(snapshot = typechecking.snapshot()) {
-    const packageControlsEnabled = getSetting('typecheck-enabled') && snapshot.status === 'ready'
+    const typecheckingEnabled = getSetting('typecheck-enabled')
+    const packageControlsEnabled = typecheckingEnabled && snapshot.status === 'ready'
     const settling = typecheckingPendingWork > 0 && snapshot.status === 'ready'
     renderTypecheckingStatus(
         QID('typecheck-tab'),
         QID('typecheck-enabled'),
         settling ? { ...snapshot, status: 'starting' } : snapshot,
-        getSetting('typecheck-enabled'),
+        typecheckingEnabled,
         T('tool.problems'),
     )
+    for (const id of [
+        'typecheck-mode',
+        'typecheck-scope',
+        'typecheck-autodetect',
+        'typecheck-viper-tools-stubs',
+    ]) {
+        QID(id).disabled = !typecheckingEnabled
+    }
     QID('typecheck-stub-package').disabled = !packageControlsEnabled
     QID('typecheck-stub-install').disabled = !packageControlsEnabled
     QID('typecheck-stub-clear').disabled = !packageControlsEnabled
@@ -302,7 +311,8 @@ function typecheckingStubValues(packages, key) {
 
 function updateTypecheckingStubApplicability() {
     const applicable = getSetting('typecheck-stub-family') !== 'circuitpython'
-    const editable = ['ready', 'error'].includes(typechecking.snapshot().status)
+    const editable = getSetting('typecheck-enabled')
+        && ['ready', 'error'].includes(typechecking.snapshot().status)
     const autodetect = getSetting('typecheck-autodetect')
     QID('typecheck-stub-family').disabled = !editable || autodetect
     for (const id of ['typecheck-stub-version', 'typecheck-stub-port', 'typecheck-stub-board']) {
@@ -727,30 +737,36 @@ async function onPromptSettled() {
 let defaultWsURL = 'ws://192.168.1.123:8266'
 let defaultWsPass = ''
 
-async function prepareNewPort(type) {
+async function prepareNewPort(type, options = {}) {
     let new_port;
     analytics.track('Device Start Connection', { connection: type })
 
     if (type === 'ws') {
-        let url
-        if (typeof window.webrepl_url === 'undefined' || window.webrepl_url == '') {
-            url = prompt('Enter WebREPL device address.\nSupported protocols: ws wss rtc', defaultWsURL)
-            if (!url) { return }
-            defaultWsURL = url
-
-            if (url.startsWith('http://')) { url = url.slice(7) }
-            if (url.startsWith('https://')) { url = url.slice(8) }
-            if (!url.includes('://')) { url = 'ws://' + url }
-
-            if (window.location.protocol === 'https:' && url.startsWith('ws://')) {
-                /* Navigate to device, which should automatically reload and ask for WebREPL password */
-                window.location.assign(url.replace('ws://', 'http://'))
-                return
-            }
-        } else {
+        let url = options.url
+        let promptedForUrl = false
+        if (url === undefined && (typeof window.webrepl_url === 'undefined' || window.webrepl_url == '')) {
+            promptedForUrl = true
+            url = await requestUserValue({
+                title: 'Connect WebREPL',
+                label: 'Device address (ws, wss, or rtc)',
+                value: defaultWsURL,
+                confirmLabel: 'Connect',
+            })
+        } else if (url === undefined) {
             url = window.webrepl_url
-            defaultWsURL = url
             window.webrepl_url = ''
+        }
+        if (!url) { return }
+        defaultWsURL = url
+
+        if (url.startsWith('http://')) { url = url.slice(7) }
+        if (url.startsWith('https://')) { url = url.slice(8) }
+        if (!url.includes('://')) { url = 'ws://' + url }
+
+        if (promptedForUrl && window.location.protocol === 'https:' && url.startsWith('ws://')) {
+            /* Navigate to device, which should automatically reload and ask for WebREPL password */
+            window.location.assign(url.replace('ws://', 'http://'))
+            return
         }
 
         if (url.startsWith('ws://') || url.startsWith('wss://')) {
@@ -774,7 +790,16 @@ async function prepareNewPort(type) {
                 /* A board that rebooted asks again, and a dialog nobody opened would
                    be a strange way to find out. The board says if it is wrong. */
                 if (deviceState === 'reconnecting' && defaultWsPass) { return defaultWsPass }
-                const pass = prompt('WebREPL password:', defaultWsPass)
+                const pass = options.password === undefined
+                    ? await requestUserValue({
+                        title: 'WebREPL password',
+                        label: 'Password',
+                        value: defaultWsPass,
+                        type: 'password',
+                        confirmLabel: 'Connect',
+                        trim: false,
+                    })
+                    : options.password
                 if (pass == null) { return }
                 if (pass.length < 4) {
                     toastr.error('Password is too short')
@@ -847,7 +872,7 @@ function wirePort(new_port) {
     new_port.onDisconnect(handlePortDisconnect)
 }
 
-export async function connectDevice(type) {
+export async function connectDevice(type, options = {}) {
     if (port) {
         const msg = (deviceState === 'reconnecting') ? 'Stop reconnecting and disconnect?'
                                                      : 'Disconnect current device?'
@@ -856,7 +881,7 @@ export async function connectDevice(type) {
         return
     }
 
-    const new_port = await prepareNewPort(type)
+    const new_port = await prepareNewPort(type, options)
     if (!new_port) { return }
     // Connect new port
     try {
@@ -991,14 +1016,15 @@ export async function refreshFileTree() {
     }
 }
 
-export async function createNewFile(path) {
+export async function createNewFile(path, name) {
     if (!portReady()) return;
-    const fn = prompt(`Creating new file inside ${path}\n` +
-                      `Please enter the name.\n` +
-                      `\n` +
-                      `Use "/" to create folders along the way:\n` +
-                      `  folder/myfile.py   - a file in a new folder\n` +
-                      `  folder/            - just the folder`)
+    const fn = name === undefined
+        ? await requestUserValue({
+            title: `Create inside ${path}`,
+            label: 'File or folder path (end with / to create a folder)',
+            confirmLabel: 'Create',
+        })
+        : name
     if (fn == null || fn == '') return
     const raw = await MpRawMode.begin(port)
     try {
@@ -2433,7 +2459,11 @@ export async function installPkgFromUrl() {
         toastr.info('Connect yout device first')
         return
     }
-    const url = prompt('Enter package name or URL:')
+    const url = await requestUserValue({
+        title: 'Install package',
+        label: 'Package name or URL',
+        confirmLabel: 'Install',
+    })
     if (url) {
         await installPkg(url)
     }

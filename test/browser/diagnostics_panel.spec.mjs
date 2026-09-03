@@ -163,8 +163,10 @@ test(
     const status = page.locator("#typecheck-tab");
     await expect(status).toHaveAttribute("data-state", "ready", { timeout: 90_000 });
 
-    page.once("dialog", (dialog) => dialog.accept("scope_unopened.py"));
-    await page.evaluate(() => globalThis.app.createNewFile("/"));
+    const createFile = page.evaluate(() => globalThis.app.createNewFile("/"));
+    await page.locator("#user-input-value").fill("scope_unopened.py");
+    await page.locator("#user-input-confirm").click();
+    await createFile;
     await expect(page.locator("#editor-tabs .tab.active")).toHaveAttribute(
       "data-fn",
       "/scope_unopened.py",
