@@ -1,5 +1,5 @@
 import { expect, test } from "./fixtures.mjs";
-import { configureTypechecking, defaultCatalogVersion } from "./helpers.mjs";
+import { collectConsoleMessages, configureTypechecking, defaultCatalogVersion } from "./helpers.mjs";
 
 // Verifies VM detection selects matching WebAssembly stubs while still allowing a manual override.
 test("test_typechecking_autodetects_connected_vm", async ({ page, consoleErrors }, testInfo) => {
@@ -288,4 +288,75 @@ test("test_typechecking_stub_packages_install_and_persist", async ({ page }, tes
   await expect(page.locator("#typecheck-stub-status")).toHaveText(
     "Enable type checking to view or manage cached stub packages.",
   );
+});
+
+// With Autoselect on, the resolved board package is downloaded from PyPI and mounted.
+test("test_autoselect_installs_detected_stub_package", async ({ page, consoleErrors }, testInfo) => {
+  const consoleMessages = collectConsoleMessages(page);
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      "settings",
+      JSON.stringify({ "typecheck-enabled": true, "advanced-mode": true }),
+    );
+  });
+  await page.goto("/?vm=1", { waitUntil: "domcontentloaded" });
+
+  const status = page.locator("#typecheck-tab");
+  await expect(status).toHaveAttribute("data-state", "ready", { timeout: 90_000 });
+  await expect(status).toHaveAttribute("title", /standard mode with webassembly stubs/, {
+    timeout: 90_000,
+  });
+  await expect(page.locator("#typecheck-stub-selected-package")).toHaveValue(
+    /^micropython-webassembly-stubs==/,
+    { timeout: 90_000 },
+  );
+
+  // The worker logs the mount of the freshly installed board package.
+  await expect
+    .poll(() => consoleMessages.join("\n"), { timeout: 90_000 })
+    .toMatch(/\[pyright-worker\] Using stub package micropython-webassembly-stubs@/);
+
+  const screenshotPath = testInfo.outputPath("typechecking-autoselect-install.png");
+  await page.screenshot({ path: screenshotPath });
+  await testInfo.attach("typechecking-autoselect-install.png", {
+    path: screenshotPath,
+    contentType: "image/png",
+  });
+  expect(consoleErrors).toEqual([]);
+});
+
+// When the PyPI wheel cannot be downloaded, Autoselect falls back to the bundled stubs.
+test("test_autoselect_falls_back_when_wheel_unavailable", async ({ page, context }, testInfo) => {
+  const consoleMessages = collectConsoleMessages(page);
+  const blockedRequests = [];
+  await context.route(/files\.pythonhosted\.org\//, async (route) => {
+    blockedRequests.push(route.request().url());
+    await route.abort("failed");
+  });
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      "settings",
+      JSON.stringify({ "typecheck-enabled": true, "advanced-mode": true }),
+    );
+  });
+  await page.goto("/?vm=1", { waitUntil: "domcontentloaded" });
+
+  const status = page.locator("#typecheck-tab");
+  await expect(status).toHaveAttribute("data-state", "ready", { timeout: 120_000 });
+  await expect(status).toHaveAttribute("title", /standard mode with webassembly stubs/, {
+    timeout: 120_000,
+  });
+
+  // The worker logs that the requested package was unavailable and bundled stubs are used.
+  await expect
+    .poll(() => consoleMessages.join("\n"), { timeout: 120_000 })
+    .toMatch(/\[pyright-worker\] Stub package micropython-webassembly-stubs.*not cached; using bundled stubs/);
+  expect(blockedRequests.length).toBeGreaterThan(0);
+
+  const screenshotPath = testInfo.outputPath("typechecking-autoselect-fallback.png");
+  await page.screenshot({ path: screenshotPath });
+  await testInfo.attach("typechecking-autoselect-fallback.png", {
+    path: screenshotPath,
+    contentType: "image/png",
+  });
 });

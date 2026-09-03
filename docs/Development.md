@@ -159,7 +159,7 @@ Run ESLint directly:
 npx eslint
 ```
 
-The ESLint configuration ignores `build/`, `src/websocket_relay.cjs`, and `mcp/`.
+The ESLint configuration ignores generated build and Playwright output, `src/websocket_relay.cjs`, and `mcp/`.
 
 ## Translations
 

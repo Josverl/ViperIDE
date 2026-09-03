@@ -29,6 +29,14 @@ export function collectConsoleErrors(page) {
   return errors;
 }
 
+export function collectConsoleMessages(page) {
+  const messages = [];
+  page.on("console", (message) => {
+    messages.push(message.text());
+  });
+  return messages;
+}
+
 export async function createPythonFile(page, filePath, content) {
   const workspacePath = filePath.startsWith("/") ? filePath : `/${filePath}`;
   const createFile = page.evaluate(() => globalThis.app.createNewFile("/"));

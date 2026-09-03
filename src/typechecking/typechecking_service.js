@@ -620,16 +620,23 @@ export class TypecheckingService {
   }
 
   /**
-   * Install a PyPI stub wheel and automatically restart Pyright.
+   * Install a PyPI stub wheel and, by default, restart Pyright to mount it.
+   *
+   * Callers that immediately reconfigure the runtime themselves (for example,
+   * autoselect resolving and mounting a board package in one pass) can pass
+   * `{ restart: false }` to avoid a redundant intermediate restart.
    *
    * @param {string} packageName PyPI package name.
    * @param {string} [versionSpecifier=''] Optional version constraint.
+   * @param {{restart?: boolean}} [options={}] Restart behavior.
    * @returns {Promise<object>} Installed package metadata.
    */
-  async installStubPackage(packageName, versionSpecifier = '') {
+  async installStubPackage(packageName, versionSpecifier = '', { restart = true } = {}) {
     const installed = await this.requireStubPackageTransport().
       installStubPackage(packageName, versionSpecifier)
-    await this.restartRuntime()
+    if (restart) {
+      await this.restartRuntime()
+    }
     return installed
   }
 

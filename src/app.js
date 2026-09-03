@@ -407,6 +407,15 @@ function setTypecheckingStubStatus(message) {
     QID('typecheck-stub-status').textContent = message
 }
 
+async function refreshCachedStubStatus() {
+    const installed = await typechecking.listInstalledStubPackages()
+    const active = installed.filter(entry => entry.active)
+    setTypecheckingStubStatus(active.length
+        ? `Cached: ${active.map(entry => `${entry.packageName}@${entry.version}`).join(', ')}`
+        : 'No cached stub packages.')
+    return installed
+}
+
 async function refreshTypecheckingStubPackages() {
     const catalog = await updateTypecheckingStubSelectors()
     const installed = await typechecking.listInstalledStubPackages()
@@ -459,6 +468,43 @@ async function clearTypecheckingStubPackages() {
     }
 }
 
+/*
+ * With Autoselect on, a resolved package is a request to install it: fetch the
+ * exact version from PyPI so the runtime mounts board-specific stubs. An already
+ * cached version is reused, and an unavailable or failed install is not fatal -
+ * the caller still restarts onto the bundled fallback stubs. Installing without
+ * restarting lets the caller mount the result in a single reconfiguration.
+ */
+async function ensureAutoselectedStubInstalled() {
+    if (!getSetting('typecheck-autodetect') || !getSetting('typecheck-enabled')) { return }
+    const target = selectedTypecheckingStubPackage
+    if (!target?.packageName || !target.version) { return }
+    try {
+        const installed = await typechecking.listInstalledStubPackages()
+        const cached = installed.find(entry =>
+            entry.active &&
+            entry.packageName === target.packageName &&
+            entry.version === target.version)
+        if (cached) { return }
+        setTypecheckingStubStatus(`Installing ${target.packageName}@${target.version}...`)
+        await typechecking.installStubPackage(
+            target.packageName,
+            `==${target.version}`,
+            { restart: false },
+        )
+        await refreshCachedStubStatus()
+    } catch (err) {
+        const port = getSetting('typecheck-stub-port') || 'bundled'
+        console.warn(`Could not install ${target.packageName}@${target.version}:`, err)
+        toastr.warning(
+            `Could not install ${target.packageName}; using bundled ${port} stubs.`,
+            'Type stubs',
+        )
+        setTypecheckingStubStatus(
+            `Could not install ${target.packageName}@${target.version}; using bundled ${port} stubs.`)
+    }
+}
+
 async function applyTypecheckingSetting(enabled) {
     if (!enabled) {
         typechecking.disable()
@@ -468,6 +514,7 @@ async function applyTypecheckingSetting(enabled) {
     await typechecking.initialize(currentTypecheckingConfig())
     await refreshTypecheckingStubPackages().
         catch(err => report('Unable to load current type-stub packages', err))
+    await ensureAutoselectedStubInstalled()
     if (selectedTypecheckingStubPackage) {
         await typechecking.restartRuntime(currentTypecheckingConfig())
     }
@@ -512,7 +559,9 @@ function queueTypecheckingSetting(enabled) {
 function queueTypecheckingDeviceSelection() {
     if (!getSetting('typecheck-autodetect')) { return queueTypecheckingReconfiguration() }
     return queueTypecheckingWork(
-        () => updateTypecheckingStubSelectors().then(() => applyTypecheckingReconfiguration()),
+        () => updateTypecheckingStubSelectors()
+            .then(ensureAutoselectedStubInstalled)
+            .then(() => applyTypecheckingReconfiguration()),
         'Unable to autodetect type stubs',
     )
 }

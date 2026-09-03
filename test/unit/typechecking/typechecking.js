@@ -271,6 +271,43 @@ describe('TypecheckingService', () => {
         })
     })
 
+    it('installs a stub package without restarting when the caller defers the runtime replacement', async () => {
+        const result = resources()
+        let installArgs = null
+        result.transport.installStubPackage = async (packageName, versionSpecifier) => {
+            installArgs = { packageName, versionSpecifier }
+            return { packageName, version: versionSpecifier.slice(2) }
+        }
+        let prepareCalls = 0
+        const service = new TypecheckingService({
+            createLSPClient: async () => result,
+            prepareRuntime: async config => {
+                prepareCalls++
+                return { workerUrl: 'blob:worker', stubBundle: { id: config.boardId } }
+            },
+        })
+        await service.initialize({ boardId: 'esp32' })
+
+        const installed = await service.installStubPackage(
+            'micropython-esp32-esp32-generic-s2-stubs',
+            '==1.29.0.post1',
+            { restart: false },
+        )
+
+        assert.deepEqual(installArgs, {
+            packageName: 'micropython-esp32-esp32-generic-s2-stubs',
+            versionSpecifier: '==1.29.0.post1',
+        })
+        assert.deepEqual(installed, {
+            packageName: 'micropython-esp32-esp32-generic-s2-stubs',
+            version: '1.29.0.post1',
+        })
+        assert.strictEqual(service.status, 'ready')
+        assert.strictEqual(service.transport, result.transport)
+        assert.strictEqual(result.transport.closeCalls, 0)
+        assert.strictEqual(prepareCalls, 1)
+    })
+
     it('forwards catalog filters through the published transport API', async () => {
         const result = resources()
         const filters = { family: 'micropython', version: '1.28.0', port: 'rp2' }
